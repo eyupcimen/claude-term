@@ -39,8 +39,11 @@ document.getElementById('btnSkipPerm').addEventListener('click', () =>
 );
 
 const modelPicker = document.getElementById('modelPicker');
+// Sonnet by default: half the per-token price of Opus, so it uses up plan limits slower.
+modelPicker.value = 'sonnet';
 try {
-  modelPicker.value = localStorage.getItem('claudeterm-model') || '';
+  const saved = localStorage.getItem('claudeterm-model');
+  if (saved !== null) modelPicker.value = saved;
 } catch {}
 
 function launch(extraFlags) {

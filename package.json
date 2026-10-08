@@ -1,7 +1,7 @@
 {
   "name": "claude-term",
   "productName": "ClaudeTerm",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A terminal that launches Claude Code and shows live session context, 5-hour and weekly limits",
   "main": "main.js",
   "scripts": {
@@ -16,7 +16,7 @@
   ],
   "author": "eyupcimen",
   "repository": "github:eyupcimen/claude-term",
-  "license": "ISC",
+  "license": "MIT",
   "type": "commonjs",
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
@@ -50,7 +50,8 @@
         {
           "target": "dmg",
           "arch": [
-            "arm64"
+            "arm64",
+            "x64"
           ]
         }
       ]
