@@ -1,0 +1,59 @@
+{
+  "name": "claude-term",
+  "productName": "ClaudeTerm",
+  "version": "1.0.0",
+  "description": "A terminal that launches Claude Code and shows live session context, 5-hour and weekly limits",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "terminal",
+    "electron"
+  ],
+  "author": "eyupcimen",
+  "repository": "github:eyupcimen/claude-term",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "node-pty": "^1.1.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.1",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.eyupcimen.claudeterm",
+    "productName": "ClaudeTerm",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "i18n.js",
+      "index.html",
+      "node_modules/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/node-pty/**"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ]
+    }
+  }
+}
