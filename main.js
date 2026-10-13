@@ -5,28 +5,40 @@ const os = require('os');
 const pty = require('node-pty');
 
 let win;
-let ptyProcess;
-let ptyDataSub;
-let statusWatchInterval;
+let settingsFile;
+let nextId = 1;
+const sessions = new Map(); // id -> { pty, dataSub, statusFile, statusInterval }
 
 // Claude Code pipes a JSON snapshot (context_window, rate_limits, workspace…)
 // into the status line command on every update. We point that command at a
-// per-window file via --settings, so the user's own settings stay untouched.
-function prepareStatusLine() {
+// per-session file via --settings, so the user's own settings stay untouched.
+function writeSettingsFile() {
   const dir = app.getPath('userData');
   fs.mkdirSync(dir, { recursive: true });
-  const statusFile = path.join(dir, `status-${process.pid}.json`);
-  const settingsFile = path.join(dir, 'claude-settings.json');
+  const file = path.join(dir, 'claude-settings.json');
   fs.writeFileSync(
-    settingsFile,
+    file,
     JSON.stringify({
       statusLine: { type: 'command', command: 'cat > "$CLAUDETERM_STATUS_FILE"' },
     })
   );
-  try {
-    fs.unlinkSync(statusFile);
-  } catch {}
-  return { statusFile, settingsFile };
+  return file;
+}
+
+// Drop Claude Code session markers inherited from a parent Claude Code
+// process (e.g. `npm start` run from inside one), otherwise the child
+// session treats itself as nested and disables transcript saving.
+function cleanEnv(extra) {
+  const env = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (k === 'CLAUDECODE' || k.startsWith('CLAUDE_CODE_')) continue;
+    env[k] = v;
+  }
+  return { ...env, ...extra };
+}
+
+function send(channel, payload) {
+  if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
 }
 
 function contextTokensFrom(cw) {
@@ -39,10 +51,9 @@ function contextTokensFrom(cw) {
   );
 }
 
-function watchStatusFile(statusFile) {
+function watchStatusFile(id, statusFile) {
   let lastMtime = 0;
-  clearInterval(statusWatchInterval);
-  statusWatchInterval = setInterval(() => {
+  return setInterval(() => {
     let stat;
     try {
       stat = fs.statSync(statusFile);
@@ -60,34 +71,190 @@ function watchStatusFile(statusFile) {
     }
 
     const rl = data.rate_limits || {};
-    const payload = {
+    send('status-update', {
+      id,
+      sessionId: data.session_id || null,
       contextTokens: contextTokensFrom(data.context_window),
       contextPct: data.context_window?.used_percentage ?? null,
+      model: data.model?.display_name || null,
       fiveHour: rl.five_hour || null,
       weekly: rl.seven_day || null,
       project: data.workspace?.project_dir || data.cwd || null,
-      home: os.homedir(),
-    };
-    if (win && !win.isDestroyed()) win.webContents.send('status-update', payload);
+    });
   }, 1000);
 }
 
-// Drop Claude Code session markers inherited from a parent Claude Code
-// process (e.g. `npm start` run from inside one), otherwise the child
-// session treats itself as nested and disables transcript saving.
-function cleanEnv(extra) {
-  const env = {};
-  for (const [k, v] of Object.entries(process.env)) {
-    if (k === 'CLAUDECODE' || k.startsWith('CLAUDE_CODE_')) continue;
-    env[k] = v;
-  }
-  return { ...env, ...extra };
+function createSession({ flags, resumeId, cwd }) {
+  const id = nextId++;
+  const statusFile = path.join(app.getPath('userData'), `status-${process.pid}-${id}.json`);
+  try {
+    fs.unlinkSync(statusFile);
+  } catch {}
+
+  const home = os.homedir();
+  const dir = cwd && fs.existsSync(cwd) ? cwd : home;
+  const p = pty.spawn(process.env.SHELL || '/bin/zsh', ['-l'], {
+    name: 'xterm-256color',
+    cols: 100,
+    rows: 30,
+    cwd: dir,
+    env: cleanEnv({ CLAUDETERM_STATUS_FILE: statusFile }),
+  });
+
+  const session = { pty: p, statusFile };
+  // Coalesce pty output into one IPC message per ~frame instead of one per
+  // chunk; heavy redraws from Claude Code otherwise flood the renderer.
+  let buffer = '';
+  session.dataSub = p.onData((data) => {
+    buffer += data;
+    if (session.flushTimer) return;
+    session.flushTimer = setTimeout(() => {
+      session.flushTimer = null;
+      const out = buffer;
+      buffer = '';
+      send('pty-data', { id, data: out });
+    }, 8);
+  });
+  session.exitSub = p.onExit(() => {
+    if (sessions.has(id)) {
+      closeSession(id);
+      send('session-exit', { id });
+    }
+  });
+  session.statusInterval = watchStatusFile(id, statusFile);
+  sessions.set(id, session);
+
+  const parts = ['claude', '--settings', `'${settingsFile}'`];
+  if (resumeId) parts.push('--resume', resumeId);
+  if (flags) parts.push(flags);
+  setTimeout(() => {
+    if (sessions.has(id)) p.write(parts.join(' ') + '; exit\r');
+  }, 400);
+
+  return { id, cwd: dir, home };
 }
 
+// node-pty's native thread can still call back into JS while Electron tears
+// down the Node environment, which aborts the process (SIGABRT in
+// Napi::ThreadSafeFunction::CallJS). Detach and kill before that happens.
+function closeSession(id) {
+  const s = sessions.get(id);
+  if (!s) return;
+  sessions.delete(id);
+  clearInterval(s.statusInterval);
+  clearTimeout(s.flushTimer);
+  s.dataSub.dispose();
+  s.exitSub.dispose();
+  try {
+    s.pty.kill();
+  } catch {}
+  try {
+    fs.unlinkSync(s.statusFile);
+  } catch {}
+}
+
+function closeAll() {
+  for (const id of [...sessions.keys()]) closeSession(id);
+}
+
+// --- Past sessions from ~/.claude/projects --------------------------------
+
+const HEAD_BYTES = 64 * 1024;
+
+function readHead(file) {
+  const fd = fs.openSync(file, 'r');
+  try {
+    const buf = Buffer.alloc(HEAD_BYTES);
+    const n = fs.readSync(fd, buf, 0, HEAD_BYTES, 0);
+    return buf.toString('utf8', 0, n);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function promptText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    const t = content.find((c) => c && c.type === 'text');
+    return t ? t.text : '';
+  }
+  return '';
+}
+
+function parseSessionHead(text) {
+  let cwd = null;
+  let title = null;
+  let summary = null;
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    let obj;
+    try {
+      obj = JSON.parse(line);
+    } catch {
+      continue; // last line may be cut off by HEAD_BYTES
+    }
+    if (obj.type === 'summary' && obj.summary && !summary) summary = obj.summary;
+    if (!cwd && obj.cwd) cwd = obj.cwd;
+    if (!title && obj.type === 'user' && !obj.isMeta) {
+      const p = promptText(obj.message?.content).trim();
+      // skip slash-command wrappers and other injected markup
+      if (p && !p.startsWith('<')) title = p.replace(/\s+/g, ' ');
+    }
+    if (cwd && title && summary) break;
+  }
+  return { cwd, title: summary || title };
+}
+
+function listHistory(limit = 40) {
+  const root = path.join(os.homedir(), '.claude', 'projects');
+  const files = [];
+  let dirs = [];
+  try {
+    dirs = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory());
+  } catch {
+    return [];
+  }
+  for (const d of dirs) {
+    const dirPath = path.join(root, d.name);
+    let names = [];
+    try {
+      names = fs.readdirSync(dirPath).filter((f) => f.endsWith('.jsonl'));
+    } catch {
+      continue;
+    }
+    for (const f of names) {
+      const full = path.join(dirPath, f);
+      try {
+        files.push({ full, id: f.slice(0, -6), mtime: fs.statSync(full).mtimeMs });
+      } catch {}
+    }
+  }
+  files.sort((a, b) => b.mtime - a.mtime);
+
+  const out = [];
+  for (const f of files) {
+    if (out.length >= limit) break;
+    let head;
+    try {
+      head = readHead(f.full);
+    } catch {
+      continue;
+    }
+    const { cwd, title } = parseSessionHead(head);
+    if (!title) continue; // nothing was ever asked in this session
+    out.push({ id: f.id, cwd, title, mtime: f.mtime });
+  }
+  return out;
+}
+
+// --- Window ----------------------------------------------------------------
+
 function createWindow() {
+  settingsFile = writeSettingsFile();
+
   win = new BrowserWindow({
-    width: 1000,
-    height: 650,
+    width: 1200,
+    height: 720,
     backgroundColor: '#1e1e1e',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -100,77 +267,30 @@ function createWindow() {
     if (e.level === 'error') console.error('[renderer]', e.message);
   });
 
-  const { statusFile, settingsFile } = prepareStatusLine();
-  const shell = process.env.SHELL || '/bin/zsh';
-  const home = os.homedir();
-
-  try {
-    ptyProcess = pty.spawn(shell, ['-l'], {
-      name: 'xterm-256color',
-      cols: 100,
-      rows: 30,
-      cwd: home,
-      env: cleanEnv({ CLAUDETERM_STATUS_FILE: statusFile }),
-    });
-  } catch (err) {
-    console.error('pty.spawn failed:', err);
-    return;
-  }
-
-  ptyDataSub = ptyProcess.onData((data) => {
-    if (win && !win.isDestroyed()) win.webContents.send('pty-data', data);
-  });
-
-  ipcMain.on('pty-input', (_evt, data) => {
-    if (ptyProcess) ptyProcess.write(data);
-  });
-
-  ipcMain.on('pty-resize', (_evt, { cols, rows }) => {
-    try {
-      ptyProcess.resize(cols, rows);
-    } catch {}
-  });
-
-  // Renderer shows a picker on load and tells us which flags to use.
-  ipcMain.once('launch-command', (_evt, extraFlags) => {
-    const flags = extraFlags ? ` ${extraFlags}` : '';
-    setTimeout(() => {
-      if (ptyProcess) ptyProcess.write(`claude --settings '${settingsFile}'${flags}\r`);
-    }, 400);
-    watchStatusFile(statusFile);
-  });
-
-  win.on('close', () => cleanup(statusFile));
+  win.on('close', closeAll);
   win.on('closed', () => {
     win = null;
   });
 }
 
-// node-pty's native thread can still call back into JS while Electron tears
-// down the Node environment on quit, which aborts the process (SIGABRT in
-// Napi::ThreadSafeFunction::CallJS). Detach and kill the pty before that.
-function cleanup(statusFile) {
-  clearInterval(statusWatchInterval);
-  if (ptyDataSub) {
-    ptyDataSub.dispose();
-    ptyDataSub = null;
-  }
-  if (ptyProcess) {
-    try {
-      ptyProcess.kill();
-    } catch {}
-    ptyProcess = null;
-  }
-  if (statusFile) {
-    try {
-      fs.unlinkSync(statusFile);
-    } catch {}
-  }
-}
+ipcMain.handle('session-create', (_e, opts) => createSession(opts));
+ipcMain.handle('history-list', () => ({ home: os.homedir(), items: listHistory() }));
+ipcMain.on('session-close', (_e, id) => closeSession(id));
+ipcMain.on('pty-input', (_e, { id, data }) => {
+  const s = sessions.get(id);
+  if (s) s.pty.write(data);
+});
+ipcMain.on('pty-resize', (_e, { id, cols, rows }) => {
+  const s = sessions.get(id);
+  if (!s) return;
+  try {
+    s.pty.resize(cols, rows);
+  } catch {}
+});
 
 app.whenReady().then(createWindow);
 
-app.on('before-quit', () => cleanup());
+app.on('before-quit', closeAll);
 
 app.on('window-all-closed', () => {
   app.quit();

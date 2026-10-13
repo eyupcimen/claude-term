@@ -2,6 +2,10 @@
 
 A small macOS terminal that opens straight into [Claude Code](https://claude.com/claude-code) and keeps your usage in view.
 
+- Sidebar with all your Claude Code sessions: open ones on top, past ones below (click to resume in the original folder)
+- Several sessions side by side in one window; the selected one fills the right side
+- Rename any session — double-click its title or use ✎. Names are kept across restarts
+- GPU-rendered terminal (WebGL) for fast scrolling
 - Asks on launch: normal mode or `--dangerously-skip-permissions`, and which model (Sonnet by default; your last choice is remembered)
 - Status bar: this session's context tokens, 5-hour limit and weekly limit (used / remaining / reset time)
 - Window title shows the current project

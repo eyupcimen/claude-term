@@ -1,9 +1,12 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('claudeTerm', {
-  onPtyData: (cb) => ipcRenderer.on('pty-data', (_e, data) => cb(data)),
-  sendInput: (data) => ipcRenderer.send('pty-input', data),
-  resize: (cols, rows) => ipcRenderer.send('pty-resize', { cols, rows }),
-  onStatusUpdate: (cb) => ipcRenderer.on('status-update', (_e, status) => cb(status)),
-  sendLaunchCommand: (extraFlags) => ipcRenderer.send('launch-command', extraFlags),
+  createSession: (opts) => ipcRenderer.invoke('session-create', opts),
+  closeSession: (id) => ipcRenderer.send('session-close', id),
+  listHistory: () => ipcRenderer.invoke('history-list'),
+  sendInput: (id, data) => ipcRenderer.send('pty-input', { id, data }),
+  resize: (id, cols, rows) => ipcRenderer.send('pty-resize', { id, cols, rows }),
+  onPtyData: (cb) => ipcRenderer.on('pty-data', (_e, msg) => cb(msg)),
+  onStatusUpdate: (cb) => ipcRenderer.on('status-update', (_e, msg) => cb(msg)),
+  onSessionExit: (cb) => ipcRenderer.on('session-exit', (_e, msg) => cb(msg)),
 });

@@ -11,6 +11,139 @@
       height: 100%;
       background: #1e1e1e;
       font-family: -apple-system, system-ui, sans-serif;
+      overflow: hidden;
+    }
+    #app {
+      display: flex;
+      height: 100%;
+    }
+
+    /* --- Sidebar (left) --- */
+    #sidebar {
+      width: 260px;
+      flex-shrink: 0;
+      background: #181818;
+      border-right: 1px solid #2c2c2c;
+      display: flex;
+      flex-direction: column;
+      color: #ccc;
+      font-size: 12.5px;
+    }
+    #sidebarTop {
+      padding: 10px;
+      border-bottom: 1px solid #2c2c2c;
+      -webkit-app-region: drag;
+    }
+    #btnNew {
+      -webkit-app-region: no-drag;
+      width: 100%;
+      padding: 8px;
+      border-radius: 7px;
+      border: 1px solid #3a3a3a;
+      background: #2a2a2a;
+      color: #eee;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    #btnNew:hover {
+      border-color: #5a9fd4;
+    }
+    #sessionLists {
+      flex: 1;
+      overflow-y: auto;
+      padding-bottom: 10px;
+    }
+    .sectionTitle {
+      padding: 12px 12px 4px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #777;
+    }
+    .item {
+      position: relative;
+      margin: 2px 6px;
+      padding: 7px 26px 7px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .item:hover {
+      background: #252526;
+    }
+    .item.active {
+      background: #2d3a4a;
+    }
+    .item .name {
+      color: #e6e6e6;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .item .meta {
+      color: #888;
+      font-size: 11px;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .item .dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #4ec9b0;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .item .actions {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      display: none;
+      gap: 2px;
+      background: inherit;
+    }
+    .item:hover .actions {
+      display: flex;
+    }
+    .item:hover {
+      padding-right: 50px;
+    }
+    .item .btn {
+      width: 18px;
+      height: 18px;
+      line-height: 16px;
+      text-align: center;
+      border-radius: 4px;
+      color: #888;
+    }
+    .item .btn:hover {
+      background: #444;
+      color: #fff;
+    }
+    .item input.rename {
+      width: 100%;
+      box-sizing: border-box;
+      background: #1e1e1e;
+      color: #fff;
+      border: 1px solid #5a9fd4;
+      border-radius: 4px;
+      padding: 1px 4px;
+      font: inherit;
+      outline: none;
+    }
+    .empty {
+      padding: 6px 12px;
+      color: #666;
+    }
+
+    /* --- Main (right) --- */
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
     }
     #statusbar {
       min-height: 32px;
@@ -53,23 +186,42 @@
     #langPicker:hover {
       border-color: #5a9fd4;
     }
-    #terminal {
-      position: absolute;
-      top: 32px;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      padding: 4px;
-      box-sizing: border-box;
+    #terminals {
+      position: relative;
+      flex: 1;
     }
-    #launchModal {
+    .termPane {
       position: absolute;
       inset: 0;
-      background: rgba(0, 0, 0, 0.6);
+      padding: 4px;
+      box-sizing: border-box;
+      display: none;
+    }
+    .termPane.visible {
+      display: block;
+    }
+    #placeholder {
+      position: absolute;
+      inset: 0;
       display: flex;
       align-items: center;
       justify-content: center;
+      color: #666;
+      font-size: 14px;
+    }
+
+    /* --- Launch modal --- */
+    #launchModal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: none;
+      align-items: center;
+      justify-content: center;
       z-index: 10;
+    }
+    #launchModal.open {
+      display: flex;
     }
     #launchModal .box {
       background: #252526;
@@ -78,12 +230,19 @@
       padding: 24px 28px;
       width: 420px;
       color: #ddd;
-      font-family: -apple-system, system-ui, sans-serif;
     }
     #launchModal h2 {
-      margin: 0 0 14px;
+      margin: 0 0 6px;
       font-size: 15px;
       font-weight: 600;
+    }
+    #launchSubtitle {
+      margin: 0 0 14px;
+      font-size: 12px;
+      color: #999;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     #launchModal .modelRow {
       display: flex;
@@ -100,7 +259,7 @@
       padding: 4px 8px;
       font-size: 13px;
     }
-    #launchModal button {
+    #launchModal .modeBtn {
       display: block;
       width: 100%;
       margin-top: 10px;
@@ -113,36 +272,64 @@
       cursor: pointer;
       text-align: left;
     }
-    #launchModal button:hover {
+    #launchModal .modeBtn:hover {
       background: #3a3a3a;
       border-color: #5a9fd4;
     }
-    #launchModal button .cmd {
+    #launchModal .modeBtn .cmd {
       display: block;
       color: #9cdcfe;
       font-family: Menlo, monospace;
       font-size: 11.5px;
       margin-top: 3px;
     }
+    #btnCancel {
+      margin-top: 12px;
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 12px;
+      cursor: pointer;
+      padding: 0;
+    }
   </style>
 </head>
 <body>
-  <div id="statusbar">
-    <select id="langPicker" title="Language">
-      <option value="en">🌐 EN</option>
-      <option value="de">🌐 DE</option>
-      <option value="tr">🌐 TR</option>
-      <option value="es">🌐 ES</option>
-    </select>
-    <span class="stat"><span class="label" id="lblContext">context:</span><span id="tokenCount">—</span></span>
-    <span class="stat"><span class="label" id="lblFiveHour">5-hour limit:</span><span id="fiveHourLimit">—</span></span>
-    <span class="stat"><span class="label" id="lblWeekly">weekly limit:</span><span id="weeklyLimit">—</span></span>
+  <div id="app">
+    <aside id="sidebar">
+      <div id="sidebarTop">
+        <button id="btnNew">+ New session</button>
+      </div>
+      <div id="sessionLists">
+        <div class="sectionTitle" id="lblActive">Active</div>
+        <div id="activeList"></div>
+        <div class="sectionTitle" id="lblHistory">History</div>
+        <div id="historyList"></div>
+      </div>
+    </aside>
+
+    <section id="main">
+      <div id="statusbar">
+        <select id="langPicker" title="Language">
+          <option value="en">🌐 EN</option>
+          <option value="de">🌐 DE</option>
+          <option value="tr">🌐 TR</option>
+          <option value="es">🌐 ES</option>
+        </select>
+        <span class="stat"><span class="label" id="lblContext">context:</span><span id="tokenCount">—</span></span>
+        <span class="stat"><span class="label" id="lblFiveHour">5-hour limit:</span><span id="fiveHourLimit">—</span></span>
+        <span class="stat"><span class="label" id="lblWeekly">weekly limit:</span><span id="weeklyLimit">—</span></span>
+      </div>
+      <div id="terminals">
+        <div id="placeholder"></div>
+      </div>
+    </section>
   </div>
-  <div id="terminal"></div>
 
   <div id="launchModal">
     <div class="box">
       <h2 id="launchTitle">How should Claude Code start?</h2>
+      <p id="launchSubtitle"></p>
       <label class="modelRow">
         <span id="modelLabel">Model</span>
         <select id="modelPicker">
@@ -152,19 +339,21 @@
           <option value="haiku">Haiku</option>
         </select>
       </label>
-      <button id="btnNormal">
+      <button class="modeBtn" id="btnNormal">
         <span id="launchNormalLabel">Normal</span>
         <span class="cmd">claude</span>
       </button>
-      <button id="btnSkipPerm">
+      <button class="modeBtn" id="btnSkipPerm">
         <span id="launchSkipLabel">Skip permission prompts</span>
         <span class="cmd">claude --dangerously-skip-permissions</span>
       </button>
+      <button id="btnCancel">Cancel</button>
     </div>
   </div>
 
   <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
   <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+  <script src="node_modules/@xterm/addon-webgl/lib/addon-webgl.js"></script>
   <script src="i18n.js"></script>
   <script src="renderer.js"></script>
 </body>
