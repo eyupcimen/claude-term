@@ -169,12 +169,73 @@ window.claudeTerm.onStatusUpdate((msg) => {
 // --- Launch modal ----------------------------------------------------------
 
 const modelPicker = $('modelPicker');
+const effortPicker = $('effortPicker');
+
+// Full model names pin an exact version; `hint` is an i18n key. Prices are
+// $ per million input/output tokens and track how fast plan limits drain.
+const MODELS = [
+  { value: '', label: null },
+  { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5 · $1/$5', hint: 'hintCheapest' },
+  { value: 'claude-sonnet-5', label: 'Sonnet 5 · $2/$10', hint: 'hintBalanced' },
+  { value: 'claude-opus-5-5', label: 'Opus 5.5 · $4/$20', hint: 'hintStrong' },
+  { value: 'claude-fable-5-1', label: 'Fable 5.1', hint: 'hintFable' },
+];
+const EFFORTS = ['', 'low', 'medium', 'high', 'xhigh', 'max'];
+// Older versions of the app saved bare aliases.
+const LEGACY_MODELS = {
+  sonnet: 'claude-sonnet-5',
+  opus: 'claude-opus-5-5',
+  haiku: 'claude-haiku-4-5-20251001',
+};
+
+function loadChoice(key, valid, fallback) {
+  try {
+    let v = localStorage.getItem(key);
+    if (v !== null) v = LEGACY_MODELS[v] || v;
+    if (v !== null && valid.includes(v)) return v;
+  } catch {}
+  return fallback;
+}
+
 // Sonnet by default: half the per-token price of Opus, so it uses up plan limits slower.
-modelPicker.value = 'sonnet';
-try {
-  const saved = localStorage.getItem('claudeterm-model');
-  if (saved !== null) modelPicker.value = saved;
-} catch {}
+let chosenModel = loadChoice('claudeterm-model', MODELS.map((m) => m.value), 'claude-sonnet-5');
+let chosenEffort = loadChoice('claudeterm-effort', EFFORTS, '');
+
+function fillLaunchPickers() {
+  modelPicker.replaceChildren(
+    ...MODELS.map((m) => {
+      const o = el('option', null, m.label || t(currentLang, 'modelDefault'));
+      o.value = m.value;
+      return o;
+    })
+  );
+  effortPicker.replaceChildren(
+    ...EFFORTS.map((e) => {
+      const o = el('option', null, t(currentLang, e ? 'effort_' + e : 'modelDefault'));
+      o.value = e;
+      return o;
+    })
+  );
+  modelPicker.value = chosenModel;
+  effortPicker.value = chosenEffort;
+  renderModelHint();
+}
+
+function renderModelHint() {
+  const m = MODELS.find((x) => x.value === modelPicker.value);
+  const parts = [];
+  if (m && m.hint) parts.push(t(currentLang, m.hint));
+  parts.push(t(currentLang, 'effortHint'));
+  $('modelHint').textContent = parts.join(' ');
+}
+
+modelPicker.addEventListener('change', () => {
+  chosenModel = modelPicker.value;
+  renderModelHint();
+});
+effortPicker.addEventListener('change', () => {
+  chosenEffort = effortPicker.value;
+});
 
 function openLaunchModal(resume) {
   pendingResume = resume || null;
@@ -191,10 +252,14 @@ function closeLaunchModal() {
 
 async function launch(extraFlags) {
   const model = modelPicker.value;
+  const effort = effortPicker.value;
   try {
     localStorage.setItem('claudeterm-model', model);
+    localStorage.setItem('claudeterm-effort', effort);
   } catch {}
-  const flags = [model ? `--model ${model}` : '', extraFlags].filter(Boolean).join(' ');
+  const flags = [model ? `--model ${model}` : '', effort ? `--effort ${effort}` : '', extraFlags]
+    .filter(Boolean)
+    .join(' ');
   const resume = pendingResume;
   closeLaunchModal();
 
@@ -340,6 +405,15 @@ function renderSidebar() {
   }
 }
 
+// Section headers fold their list: Active starts open, History closed.
+for (const header of document.querySelectorAll('.sectionTitle')) {
+  header.addEventListener('click', () => {
+    const list = $(header.dataset.list);
+    list.hidden = !list.hidden;
+    header.classList.toggle('collapsed', list.hidden);
+  });
+}
+
 // --- Status bar ------------------------------------------------------------
 
 function renderLimit(id, key) {
@@ -381,6 +455,7 @@ function render() {
 // --- Language --------------------------------------------------------------
 
 function applyLang() {
+  document.documentElement.lang = currentLang; // so uppercase headers get "AKTİF", not "AKTIF"
   $('langPicker').value = currentLang;
   $('lblContext').textContent = t(currentLang, 'context') + ':';
   $('lblFiveHour').textContent = t(currentLang, 'fiveHour') + ':';
@@ -393,7 +468,8 @@ function applyLang() {
   $('launchNormalLabel').textContent = t(currentLang, 'launchNormal');
   $('launchSkipLabel').textContent = t(currentLang, 'launchSkipPerm');
   $('modelLabel').textContent = t(currentLang, 'model');
-  $('modelDefaultOpt').textContent = t(currentLang, 'modelDefault');
+  $('effortLabel').textContent = t(currentLang, 'effort');
+  fillLaunchPickers();
   $('btnCancel').textContent = t(currentLang, 'cancel');
   render();
 }

@@ -6,7 +6,7 @@ A small macOS terminal that opens straight into [Claude Code](https://claude.com
 - Several sessions side by side in one window; the selected one fills the right side
 - Rename any session — double-click its title or use ✎. Names are kept across restarts
 - GPU-rendered terminal (WebGL) for fast scrolling
-- Asks on launch: normal mode or `--dangerously-skip-permissions`, and which model (Sonnet by default; your last choice is remembered)
+- Asks on launch: normal mode or `--dangerously-skip-permissions`, which model (Haiku 4.5, Sonnet 5, Opus 5.5, Fable 5.1 — Sonnet by default) and effort level (lower effort uses fewer tokens). Your last choice is remembered
 - Status bar: this session's context tokens, 5-hour limit and weekly limit (used / remaining / reset time)
 - Window title shows the current project
 - UI in English, German, Turkish and Spanish (follows the system language, switchable from the 🌐 menu)

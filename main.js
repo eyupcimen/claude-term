@@ -137,24 +137,56 @@ function createSession({ flags, resumeId, cwd }) {
 // node-pty's native thread can still call back into JS while Electron tears
 // down the Node environment, which aborts the process (SIGABRT in
 // Napi::ThreadSafeFunction::CallJS). Detach and kill before that happens.
+// Resolves once the pty has actually exited, so quitting can wait for the
+// native exit callback instead of racing it.
 function closeSession(id) {
   const s = sessions.get(id);
-  if (!s) return;
+  if (!s) return Promise.resolve();
   sessions.delete(id);
   clearInterval(s.statusInterval);
   clearTimeout(s.flushTimer);
   s.dataSub.dispose();
   s.exitSub.dispose();
   try {
-    s.pty.kill();
-  } catch {}
-  try {
     fs.unlinkSync(s.statusFile);
   } catch {}
+  return new Promise((resolve) => {
+    // If the shell ignores SIGHUP, force it, then give up after another second.
+    let timer = setTimeout(() => {
+      try {
+        s.pty.kill('SIGKILL');
+      } catch {}
+      timer = setTimeout(resolve, 1000);
+    }, 1500);
+    const sub = s.pty.onExit(() => {
+      clearTimeout(timer);
+      sub.dispose();
+      resolve();
+    });
+    try {
+      s.pty.kill();
+    } catch {
+      clearTimeout(timer);
+      resolve();
+    }
+  });
 }
 
 function closeAll() {
-  for (const id of [...sessions.keys()]) closeSession(id);
+  return Promise.all([...sessions.keys()].map(closeSession));
+}
+
+// Hold the window close / app quit until every pty is gone, then retry.
+let shuttingDown = false;
+function holdUntilClosed(e, then) {
+  if (!sessions.size) return;
+  e.preventDefault();
+  if (shuttingDown) return;
+  shuttingDown = true;
+  closeAll().then(() => {
+    shuttingDown = false;
+    then();
+  });
 }
 
 // --- Past sessions from ~/.claude/projects --------------------------------
@@ -267,7 +299,7 @@ function createWindow() {
     if (e.level === 'error') console.error('[renderer]', e.message);
   });
 
-  win.on('close', closeAll);
+  win.on('close', (e) => holdUntilClosed(e, () => win && win.close()));
   win.on('closed', () => {
     win = null;
   });
@@ -290,7 +322,7 @@ ipcMain.on('pty-resize', (_e, { id, cols, rows }) => {
 
 app.whenReady().then(createWindow);
 
-app.on('before-quit', closeAll);
+app.on('before-quit', (e) => holdUntilClosed(e, () => app.quit()));
 
 app.on('window-all-closed', () => {
   app.quit();

@@ -59,6 +59,29 @@
       text-transform: uppercase;
       letter-spacing: 0.04em;
       color: #777;
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .sectionTitle:hover {
+      color: #aaa;
+    }
+    /* Chevron pinned to the right edge, sized to the label's text height */
+    .sectionTitle .arrow {
+      width: 1.2em;
+      height: 1.2em;
+      flex-shrink: 0;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      transition: transform 0.12s;
+    }
+    .sectionTitle.collapsed .arrow {
+      transform: rotate(-90deg);
     }
     .item {
       position: relative;
@@ -251,7 +274,13 @@
       font-size: 13px;
       color: #bbb;
     }
-    #modelPicker {
+    #modelHint {
+      margin: 8px 0 4px;
+      font-size: 11.5px;
+      color: #888;
+    }
+    #modelPicker,
+    #effortPicker {
       background: #333;
       color: #eee;
       border: 1px solid #444;
@@ -301,10 +330,14 @@
         <button id="btnNew">+ New session</button>
       </div>
       <div id="sessionLists">
-        <div class="sectionTitle" id="lblActive">Active</div>
+        <div class="sectionTitle" data-list="activeList">
+          <span id="lblActive">Active</span><svg class="arrow" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.25 6 7.75l3.5-3.5"/></svg>
+        </div>
         <div id="activeList"></div>
-        <div class="sectionTitle" id="lblHistory">History</div>
-        <div id="historyList"></div>
+        <div class="sectionTitle collapsed" data-list="historyList">
+          <span id="lblHistory">History</span><svg class="arrow" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.25 6 7.75l3.5-3.5"/></svg>
+        </div>
+        <div id="historyList" hidden></div>
       </div>
     </aside>
 
@@ -332,13 +365,13 @@
       <p id="launchSubtitle"></p>
       <label class="modelRow">
         <span id="modelLabel">Model</span>
-        <select id="modelPicker">
-          <option value="" id="modelDefaultOpt">Default</option>
-          <option value="sonnet">Sonnet</option>
-          <option value="opus">Opus</option>
-          <option value="haiku">Haiku</option>
-        </select>
+        <select id="modelPicker"></select>
       </label>
+      <label class="modelRow" style="margin-top: 8px">
+        <span id="effortLabel">Effort</span>
+        <select id="effortPicker"></select>
+      </label>
+      <p id="modelHint"></p>
       <button class="modeBtn" id="btnNormal">
         <span id="launchNormalLabel">Normal</span>
         <span class="cmd">claude</span>
