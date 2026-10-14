@@ -148,6 +148,7 @@ window.claudeTerm.onStatusUpdate((msg) => {
     }
     s.project = msg.project || s.project;
     s.model = msg.model || s.model;
+    s.aiTitle = msg.aiTitle || s.aiTitle;
     s.contextTokens = msg.contextTokens;
     s.contextPct = msg.contextPct;
   }
@@ -273,6 +274,7 @@ async function launch(extraFlags) {
     ...createTermPane(id),
     project: cwd,
     sessionId: resume?.id || null,
+    aiTitle: resume?.title || null,
     contextTokens: null,
     contextPct: null,
     model: null,
@@ -297,7 +299,7 @@ async function refreshHistory() {
 
 function activeTitle(s) {
   if (s.customTitle) return s.customTitle;
-  return (s.sessionId && titles[s.sessionId]) || projectName(s.project);
+  return (s.sessionId && titles[s.sessionId]) || s.aiTitle || projectName(s.project);
 }
 
 function setActiveTitle(s, title) {

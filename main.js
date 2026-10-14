@@ -51,8 +51,12 @@ function contextTokensFrom(cw) {
   );
 }
 
+const TITLE_CHECK_MS = 15000;
+
 function watchStatusFile(id, statusFile) {
   let lastMtime = 0;
+  let aiTitle = null;
+  let lastTitleCheck = 0;
   return setInterval(() => {
     let stat;
     try {
@@ -70,9 +74,17 @@ function watchStatusFile(id, statusFile) {
       return; // partially written; next tick will catch it
     }
 
+    // Claude Code names the session after the first exchange; pick it up
+    // from the transcript, throttled since the file can be large.
+    if (data.transcript_path && Date.now() - lastTitleCheck > TITLE_CHECK_MS) {
+      lastTitleCheck = Date.now();
+      aiTitle = transcriptTitle(data.transcript_path) || aiTitle;
+    }
+
     const rl = data.rate_limits || {};
     send('status-update', {
       id,
+      aiTitle,
       sessionId: data.session_id || null,
       contextTokens: contextTokensFrom(data.context_window),
       contextPct: data.context_window?.used_percentage ?? null,
@@ -204,6 +216,45 @@ function readHead(file) {
   }
 }
 
+const TAIL_BYTES = 256 * 1024;
+
+function readTail(file) {
+  const fd = fs.openSync(file, 'r');
+  try {
+    const size = fs.fstatSync(fd).size;
+    const start = Math.max(0, size - TAIL_BYTES);
+    const buf = Buffer.alloc(size - start);
+    const n = fs.readSync(fd, buf, 0, buf.length, start);
+    return buf.toString('utf8', 0, n);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// Claude Code writes its own short session title into the transcript
+// ("ai-title", or "custom-title" after /rename). Reusing it costs no tokens.
+// The latest one wins; it usually sits near the end, so check the tail first.
+function findAiTitle(text) {
+  let found = null;
+  for (const line of text.split('\n')) {
+    if (!line.includes('-title"')) continue;
+    try {
+      const o = JSON.parse(line);
+      if (o.type === 'custom-title' && o.customTitle) found = o.customTitle;
+      else if (o.type === 'ai-title' && o.aiTitle) found = o.aiTitle;
+    } catch {}
+  }
+  return found;
+}
+
+function transcriptTitle(file, head) {
+  try {
+    return findAiTitle(readTail(file)) || findAiTitle(head ?? readHead(file));
+  } catch {
+    return null;
+  }
+}
+
 function promptText(content) {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
@@ -274,7 +325,7 @@ function listHistory(limit = 40) {
     }
     const { cwd, title } = parseSessionHead(head);
     if (!title) continue; // nothing was ever asked in this session
-    out.push({ id: f.id, cwd, title, mtime: f.mtime });
+    out.push({ id: f.id, cwd, title: transcriptTitle(f.full, head) || title, mtime: f.mtime });
   }
   return out;
 }
