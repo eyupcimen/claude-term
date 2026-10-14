@@ -320,7 +320,13 @@ ipcMain.on('pty-resize', (_e, { id, cols, rows }) => {
   } catch {}
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  // The packaged app gets its icon from the bundle; `npm start` would show Electron's.
+  if (!app.isPackaged && process.platform === 'darwin') {
+    app.dock.setIcon(path.join(__dirname, 'assets', 'icon.png'));
+  }
+  createWindow();
+});
 
 app.on('before-quit', (e) => holdUntilClosed(e, () => app.quit()));
 

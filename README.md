@@ -26,6 +26,15 @@ npm start          # run it
 npm run dist       # or build ClaudeTerm.app + dmg into dist/
 ```
 
+To install it like any other app, build the `.app` only and copy it to Applications:
+
+```sh
+npx electron-builder --mac dir
+cp -R dist/mac-arm64/ClaudeTerm.app /Applications/    # Intel Macs: dist/mac/
+```
+
+Then open it from Spotlight (⌘ Space → ClaudeTerm).
+
 Or open the folder in Claude Code and ask: *"build and run this app"*.
 
 A locally built app isn't quarantined, so macOS opens it without the Gatekeeper warning.

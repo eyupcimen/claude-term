@@ -38,6 +38,7 @@
       "renderer.js",
       "i18n.js",
       "index.html",
+      "assets/icon.png",
       "node_modules/**/*"
     ],
     "asarUnpack": [
@@ -56,6 +57,10 @@
           ]
         }
       ]
-    }
+    },
+    "directories": {
+      "buildResources": "assets"
+    },
+    "icon": "assets/icon.png"
   }
 }
