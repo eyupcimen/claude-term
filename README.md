@@ -2,6 +2,8 @@
 
 A small macOS terminal that opens straight into [Claude Code](https://claude.com/claude-code) and keeps your usage in view.
 
+![ClaudeTerm: sessions with model and live status on the left, Claude Code in the middle, session details on the right](docs/screenshot.png)
+
 - Sidebar with all your Claude Code sessions: open ones on top, past ones below (click to resume in the original folder)
 - Each open session shows its model (e.g. `Opus 5.5`) and live status: busy, waiting for you, or idle
 - "Other terminals" lists Claude Code sessions running outside ClaudeTerm, so you can see them all in one place
