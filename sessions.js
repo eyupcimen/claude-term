@@ -221,6 +221,11 @@ const CHARS_PER_TOKEN = 4;
 const MAX_RECORD_CHARS = 256 * 1024;
 
 const tok = (chars) => Math.round(chars / CHARS_PER_TOKEN);
+// Gaps longer than this are the session sitting open, not being used. A resumed
+// session would otherwise count every day in between.
+const IDLE_GAP_MS = 30 * 60 * 1000;
+// A single model call or tool run rarely takes longer than this.
+const WORK_GAP_MS = 10 * 60 * 1000;
 const joinedLength = (arr) =>
   Array.isArray(arr) ? arr.reduce((n, e) => n + (typeof e === 'string' ? e : JSON.stringify(e ?? '')).length + 1, 0) : 0;
 
@@ -328,6 +333,8 @@ async function scan(file, id) {
   let activeMs = 0;
   let firstTs;
   let lastTs;
+  let openMs = 0; // time in use, idle gaps left out
+  let busyMs = 0; // time Claude spent producing records (fallback for activeMs)
   let cwd;
   let customTitle;
   let aiTitle;
@@ -347,6 +354,13 @@ async function scan(file, id) {
     if (r.timestamp) {
       const ts = Date.parse(r.timestamp);
       if (ts) {
+        const gap = lastTs !== undefined ? ts - lastTs : 0;
+        if (gap > 0 && gap <= IDLE_GAP_MS) openMs += gap;
+        // An assistant record or a tool result closes a stretch of Claude working.
+        const working =
+          r.type === 'assistant' ||
+          (r.type === 'user' && Array.isArray(r.message?.content) && r.message.content.some((b) => b?.type === 'tool_result'));
+        if (working && gap > 0 && gap <= WORK_GAP_MS) busyMs += gap;
         firstTs ??= ts;
         lastTs = ts;
       }
@@ -446,7 +460,9 @@ async function scan(file, id) {
     counts,
     tokens,
     tools: [...tools.entries()].sort((a, b) => b[1] - a[1]).map(([name, calls]) => ({ name, calls })),
-    activeMs: activeMs || null,
+    // Older transcripts carry no turn durations; estimate from timestamps then.
+    activeMs: activeMs || busyMs || null,
+    openMs: openMs || null,
     startedAt: firstTs || null,
     lastActiveAt: lastTs || null,
     context: lastTurn ? buildContext(firstTurn, lastTurn, lastModel, slices) : null,

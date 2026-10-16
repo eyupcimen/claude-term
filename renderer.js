@@ -360,7 +360,7 @@ async function refreshHistory() {
 
 function activeTitle(s) {
   if (s.customTitle) return s.customTitle;
-  return (s.sessionId && titles[s.sessionId]) || s.aiTitle || projectName(s.project);
+  return (s.sessionId && titles[s.sessionId]) || s.aiTitle || t(currentLang, 'newSession');
 }
 
 function setActiveTitle(s, title) {
@@ -697,7 +697,6 @@ function renderDetail(d) {
 
   // Activity
   const c = d.counts;
-  const elapsed = d.startedAt && d.lastActiveAt ? d.lastActiveAt - d.startedAt : null;
   body.appendChild(
     section(
       t(currentLang, 'd_activity'),
@@ -707,7 +706,7 @@ function renderDetail(d) {
         [t(currentLang, 'd_toolCalls'), fmt(c.tool)],
         [t(currentLang, 'd_subagents'), fmt(c.subagents)],
         [t(currentLang, 'd_working'), duration(d.activeMs)],
-        [t(currentLang, 'd_elapsed'), duration(elapsed)],
+        [t(currentLang, 'd_elapsed'), duration(d.openMs)],
       ])
     )
   );
