@@ -1,8 +1,12 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const pty = require('node-pty');
+const { listLive, readDetail } = require('./sessions');
+
+// Under `npm start` the app would otherwise be called "Electron".
+app.setName('ClaudeTerm');
 
 let win;
 let settingsFile;
@@ -338,7 +342,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1200,
     height: 720,
-    backgroundColor: '#1e1e1e',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#141413' : '#faf9f5',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -358,6 +362,8 @@ function createWindow() {
 
 ipcMain.handle('session-create', (_e, opts) => createSession(opts));
 ipcMain.handle('history-list', () => ({ home: os.homedir(), items: listHistory() }));
+ipcMain.handle('sessions-live', () => listLive());
+ipcMain.handle('session-detail', (_e, id) => readDetail(id));
 ipcMain.on('session-close', (_e, id) => closeSession(id));
 ipcMain.on('pty-input', (_e, { id, data }) => {
   const s = sessions.get(id);

@@ -5,11 +5,53 @@
   <title>ClaudeTerm</title>
   <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css" />
   <style>
+    /* --- Theme tokens: dark by default, light via OS or the picker --- */
+    :root {
+      --bg: #141413;
+      --bg-2: #1b1a19;
+      --bg-3: #252422;
+      --selected: #2b2420;
+      --line: #2c2b29;
+      --text: #ecebe7;
+      --text-2: #a8a59d;
+      --text-3: #6f6c66;
+      --accent: #d97757;
+      --accent-soft: rgba(217, 119, 87, 0.14);
+      --track: #2e2d2a;
+      --static: #8a8579;
+      --green: #8fa36b;
+      --amber: #d4a24c;
+      --red: #d0675d;
+      --scrim: rgba(0, 0, 0, 0.6);
+      --mono: 'SF Mono', Menlo, monospace;
+      color-scheme: dark;
+    }
+    :root[data-theme='light'] {
+      --bg: #faf9f5;
+      --bg-2: #f2f0ea;
+      --bg-3: #e8e5dd;
+      --selected: #f1e2d9;
+      --line: #dfdbd1;
+      --text: #1f1e1d;
+      --text-2: #5f5c55;
+      --text-3: #8f8b82;
+      --accent: #c4613f;
+      --accent-soft: rgba(196, 97, 63, 0.12);
+      --track: #e6e2d8;
+      --static: #8a8579;
+      --green: #5f7a3a;
+      --amber: #a87a1e;
+      --red: #b5483e;
+      --scrim: rgba(40, 36, 30, 0.35);
+      color-scheme: light;
+    }
+
     html, body {
       margin: 0;
       padding: 0;
       height: 100%;
-      background: #1e1e1e;
+      background: var(--bg);
+      color: var(--text);
       font-family: -apple-system, system-ui, sans-serif;
       overflow: hidden;
     }
@@ -17,21 +59,24 @@
       display: flex;
       height: 100%;
     }
+    .mono {
+      font-family: var(--mono);
+    }
 
     /* --- Sidebar (left) --- */
     #sidebar {
-      width: 260px;
+      width: 280px;
       flex-shrink: 0;
-      background: #181818;
-      border-right: 1px solid #2c2c2c;
+      background: var(--bg-2);
+      border-right: 1px solid var(--line);
       display: flex;
       flex-direction: column;
-      color: #ccc;
+      color: var(--text-2);
       font-size: 12.5px;
     }
     #sidebarTop {
       padding: 10px;
-      border-bottom: 1px solid #2c2c2c;
+      border-bottom: 1px solid var(--line);
       -webkit-app-region: drag;
     }
     #btnNew {
@@ -39,14 +84,14 @@
       width: 100%;
       padding: 8px;
       border-radius: 7px;
-      border: 1px solid #3a3a3a;
-      background: #2a2a2a;
-      color: #eee;
+      border: 1px solid var(--line);
+      background: var(--bg-3);
+      color: var(--text);
       font-size: 13px;
       cursor: pointer;
     }
     #btnNew:hover {
-      border-color: #5a9fd4;
+      border-color: var(--accent);
     }
     #sessionLists {
       flex: 1;
@@ -54,11 +99,12 @@
       padding-bottom: 10px;
     }
     .sectionTitle {
-      padding: 12px 12px 4px;
-      font-size: 11px;
+      padding: 14px 12px 5px;
+      font-family: var(--mono);
+      font-size: 10.5px;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: #777;
+      letter-spacing: 0.12em;
+      color: var(--text-3);
       cursor: pointer;
       user-select: none;
       display: flex;
@@ -66,12 +112,16 @@
       justify-content: space-between;
     }
     .sectionTitle:hover {
-      color: #aaa;
+      color: var(--text-2);
+    }
+    .sectionTitle .count {
+      margin-left: 6px;
     }
     /* Chevron pinned to the right edge, sized to the label's text height */
     .sectionTitle .arrow {
       width: 1.2em;
       height: 1.2em;
+      margin-left: auto;
       flex-shrink: 0;
       fill: none;
       stroke: currentColor;
@@ -86,27 +136,51 @@
     .item {
       position: relative;
       margin: 2px 6px;
-      padding: 7px 26px 7px 10px;
+      padding: 7px 10px;
       border-radius: 6px;
       cursor: pointer;
     }
     .item:hover {
-      background: #252526;
+      background: var(--bg-3);
     }
     .item.active {
-      background: #2d3a4a;
+      background: var(--selected);
+      box-shadow: inset 2px 0 0 var(--accent);
+    }
+    .item.external {
+      cursor: default;
+    }
+    .item .nameRow {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
     }
     .item .name {
-      color: #e6e6e6;
+      flex: 1;
+      min-width: 0;
+      color: var(--text);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .item .meta {
-      color: #888;
-      font-size: 11px;
-      margin-top: 2px;
+    .model {
+      flex-shrink: 0;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--accent);
       white-space: nowrap;
+    }
+    .item .meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-3);
+      font-size: 11px;
+      margin-top: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .item .meta .text {
       overflow: hidden;
       text-overflow: ellipsis;
     }
@@ -115,42 +189,61 @@
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: #4ec9b0;
-      margin-right: 6px;
+      background: var(--text-3);
+      margin-right: 7px;
       vertical-align: middle;
+      flex-shrink: 0;
+    }
+    .dot.busy {
+      background: var(--accent);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    .dot.waiting {
+      background: var(--amber);
+    }
+    .dot.idle {
+      background: var(--text-3);
+    }
+    @keyframes pulse {
+      50% {
+        opacity: 0.35;
+      }
     }
     .item .actions {
       position: absolute;
-      top: 6px;
+      top: 5px;
       right: 6px;
       display: none;
       gap: 2px;
-      background: inherit;
+      padding-left: 6px;
+      background: var(--bg-3);
+      border-radius: 4px;
+    }
+    .item.active .actions {
+      background: var(--selected);
     }
     .item:hover .actions {
       display: flex;
     }
-    .item:hover {
-      padding-right: 50px;
-    }
     .item .btn {
       width: 18px;
       height: 18px;
-      line-height: 16px;
+      line-height: 17px;
       text-align: center;
       border-radius: 4px;
-      color: #888;
+      color: var(--text-3);
+      font-size: 12px;
     }
     .item .btn:hover {
-      background: #444;
-      color: #fff;
+      background: var(--line);
+      color: var(--text);
     }
     .item input.rename {
       width: 100%;
       box-sizing: border-box;
-      background: #1e1e1e;
-      color: #fff;
-      border: 1px solid #5a9fd4;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--accent);
       border-radius: 4px;
       padding: 1px 4px;
       font: inherit;
@@ -158,11 +251,45 @@
     }
     .empty {
       padding: 6px 12px;
-      color: #666;
+      color: var(--text-3);
+    }
+
+    /* --- Status pill: BUSY / WAITING / IDLE --- */
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 1px 7px;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      line-height: 14px;
+      flex-shrink: 0;
+    }
+    .pill::before {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .pill.busy {
+      color: var(--accent);
+    }
+    .pill.waiting {
+      color: var(--amber);
+    }
+    .pill.idle,
+    .pill.ended {
+      color: var(--text-3);
     }
 
     /* --- Main (right) --- */
     #main {
+      position: relative;
       flex: 1;
       display: flex;
       flex-direction: column;
@@ -175,9 +302,9 @@
       justify-content: flex-end;
       gap: 18px;
       padding: 0 14px;
-      background: #252526;
-      border-bottom: 1px solid #333;
-      color: #9cdcfe;
+      background: var(--bg-2);
+      border-bottom: 1px solid var(--line);
+      color: var(--text);
       font-size: 12.5px;
       -webkit-app-region: drag;
       flex-wrap: wrap;
@@ -186,28 +313,32 @@
       white-space: nowrap;
     }
     #statusbar .label {
-      color: #888;
+      color: var(--text-3);
       margin-right: 5px;
     }
     #statusbar .warn {
-      color: #e5c07b;
+      color: var(--amber);
     }
     #statusbar .danger {
-      color: #e06c75;
+      color: var(--red);
     }
-    #langPicker {
+    .pickers {
       margin-right: auto;
+      display: flex;
+      gap: 6px;
+    }
+    .pickers select {
       -webkit-app-region: no-drag;
       background: transparent;
-      border: 1px solid #444;
+      border: 1px solid var(--line);
       border-radius: 6px;
-      color: #ccc;
+      color: var(--text-2);
       font-size: 12px;
       padding: 2px 5px;
       cursor: pointer;
     }
-    #langPicker:hover {
-      border-color: #5a9fd4;
+    .pickers select:hover {
+      border-color: var(--accent);
     }
     #terminals {
       position: relative;
@@ -216,7 +347,7 @@
     .termPane {
       position: absolute;
       inset: 0;
-      padding: 4px;
+      padding: 4px 4px 4px 8px;
       box-sizing: border-box;
       display: none;
     }
@@ -229,15 +360,234 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #666;
+      color: var(--text-3);
       font-size: 14px;
+    }
+
+    /* --- Session detail panel --- */
+    #detail {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: min(420px, 90%);
+      background: var(--bg-2);
+      border-left: 1px solid var(--line);
+      box-shadow: -12px 0 32px rgba(0, 0, 0, 0.25);
+      transform: translateX(105%);
+      transition: transform 0.18s ease;
+      display: flex;
+      flex-direction: column;
+      z-index: 5;
+      color: var(--text);
+      font-size: 13px;
+    }
+    #detail.open {
+      transform: none;
+    }
+    #detailHead {
+      position: relative;
+      padding: 16px 48px 14px 20px;
+      border-bottom: 1px solid var(--accent);
+    }
+    #detailProject {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+    #detailTitle {
+      margin-top: 4px;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+    #detailClose {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      width: 26px;
+      height: 26px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: var(--bg);
+      color: var(--text-2);
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+    }
+    #detailClose:hover {
+      color: var(--text);
+      border-color: var(--accent);
+    }
+    #detailBody {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 20px 24px;
+    }
+    .dSection {
+      padding: 16px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .dSection:last-child {
+      border-bottom: none;
+    }
+    .dLabel {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+    .dSection > .dLabel {
+      margin-bottom: 12px;
+      color: var(--text-2);
+      font-weight: 600;
+    }
+    .dTop {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      color: var(--text-3);
+      font-size: 12px;
+    }
+    .dTop .model {
+      font-size: 12px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px 10px;
+    }
+    .grid .val {
+      margin-top: 3px;
+      font-size: 16px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .grid .val.accent {
+      color: var(--accent);
+    }
+    .note {
+      margin-top: 10px;
+      color: var(--text-3);
+      font-size: 11.5px;
+      line-height: 1.45;
+    }
+    .bar {
+      position: relative;
+      display: flex;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--track);
+      overflow: hidden;
+    }
+    .bar > span {
+      height: 100%;
+    }
+    .bar .static {
+      background: var(--static);
+    }
+    .bar .conv,
+    .bar .fill {
+      background: var(--accent);
+    }
+    .bar .fill.muted {
+      background: var(--static);
+    }
+    .ctxBar {
+      margin-bottom: 12px;
+    }
+    .row {
+      margin-bottom: 10px;
+    }
+    .row .rowHead {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 5px;
+    }
+    .row .rowName {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .row .rowName.muted {
+      color: var(--text-2);
+    }
+    .row .rowVal {
+      flex-shrink: 0;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--text-2);
+    }
+    .row .bar {
+      height: 3px;
+    }
+    .list {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px 12px;
+      font-size: 12.5px;
+    }
+    .list .num {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--text-2);
+      text-align: right;
+    }
+    .sub {
+      margin: 14px 0 8px;
+    }
+    .linkBtn {
+      margin-top: 8px;
+      background: none;
+      border: none;
+      padding: 0;
+      color: var(--accent);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .resume {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--bg);
+      font-family: var(--mono);
+      font-size: 11.5px;
+    }
+    .resume code {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .resume button {
+      background: none;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      color: var(--text-2);
+      font-size: 11px;
+      padding: 2px 8px;
+      cursor: pointer;
+    }
+    .resume button:hover {
+      border-color: var(--accent);
+      color: var(--text);
     }
 
     /* --- Launch modal --- */
     #launchModal {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.6);
+      background: var(--scrim);
       display: none;
       align-items: center;
       justify-content: center;
@@ -247,12 +597,13 @@
       display: flex;
     }
     #launchModal .box {
-      background: #252526;
-      border: 1px solid #3a3a3a;
+      background: var(--bg-2);
+      border: 1px solid var(--line);
+      border-top: 2px solid var(--accent);
       border-radius: 10px;
       padding: 24px 28px;
       width: 420px;
-      color: #ddd;
+      color: var(--text);
     }
     #launchModal h2 {
       margin: 0 0 6px;
@@ -262,7 +613,7 @@
     #launchSubtitle {
       margin: 0 0 14px;
       font-size: 12px;
-      color: #999;
+      color: var(--text-2);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -272,18 +623,18 @@
       align-items: center;
       justify-content: space-between;
       font-size: 13px;
-      color: #bbb;
+      color: var(--text-2);
     }
     #modelHint {
       margin: 8px 0 4px;
       font-size: 11.5px;
-      color: #888;
+      color: var(--text-3);
     }
     #modelPicker,
     #effortPicker {
-      background: #333;
-      color: #eee;
-      border: 1px solid #444;
+      background: var(--bg-3);
+      color: var(--text);
+      border: 1px solid var(--line);
       border-radius: 6px;
       padding: 4px 8px;
       font-size: 13px;
@@ -294,21 +645,20 @@
       margin-top: 10px;
       padding: 10px 12px;
       border-radius: 8px;
-      border: 1px solid #444;
-      background: #333;
-      color: #eee;
+      border: 1px solid var(--line);
+      background: var(--bg-3);
+      color: var(--text);
       font-size: 13px;
       cursor: pointer;
       text-align: left;
     }
     #launchModal .modeBtn:hover {
-      background: #3a3a3a;
-      border-color: #5a9fd4;
+      border-color: var(--accent);
     }
     #launchModal .modeBtn .cmd {
       display: block;
-      color: #9cdcfe;
-      font-family: Menlo, monospace;
+      color: var(--accent);
+      font-family: var(--mono);
       font-size: 11.5px;
       margin-top: 3px;
     }
@@ -316,7 +666,7 @@
       margin-top: 12px;
       background: none;
       border: none;
-      color: #888;
+      color: var(--text-3);
       font-size: 12px;
       cursor: pointer;
       padding: 0;
@@ -334,6 +684,10 @@
           <span id="lblActive">Active</span><svg class="arrow" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.25 6 7.75l3.5-3.5"/></svg>
         </div>
         <div id="activeList"></div>
+        <div class="sectionTitle" data-list="externalList" id="externalTitle">
+          <span id="lblExternal">Other terminals</span><span class="count" id="externalCount"></span><svg class="arrow" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.25 6 7.75l3.5-3.5"/></svg>
+        </div>
+        <div id="externalList"></div>
         <div class="sectionTitle collapsed" data-list="historyList">
           <span id="lblHistory">History</span><svg class="arrow" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.25 6 7.75l3.5-3.5"/></svg>
         </div>
@@ -343,12 +697,15 @@
 
     <section id="main">
       <div id="statusbar">
-        <select id="langPicker" title="Language">
-          <option value="en">🌐 EN</option>
-          <option value="de">🌐 DE</option>
-          <option value="tr">🌐 TR</option>
-          <option value="es">🌐 ES</option>
-        </select>
+        <div class="pickers">
+          <select id="langPicker" title="Language">
+            <option value="en">🌐 EN</option>
+            <option value="de">🌐 DE</option>
+            <option value="tr">🌐 TR</option>
+            <option value="es">🌐 ES</option>
+          </select>
+          <select id="themePicker"></select>
+        </div>
         <span class="stat"><span class="label" id="lblContext">context:</span><span id="tokenCount">—</span></span>
         <span class="stat"><span class="label" id="lblFiveHour">5-hour limit:</span><span id="fiveHourLimit">—</span></span>
         <span class="stat"><span class="label" id="lblWeekly">weekly limit:</span><span id="weeklyLimit">—</span></span>
@@ -356,6 +713,15 @@
       <div id="terminals">
         <div id="placeholder"></div>
       </div>
+
+      <aside id="detail" aria-hidden="true">
+        <div id="detailHead">
+          <div id="detailProject"></div>
+          <div id="detailTitle"></div>
+          <button id="detailClose" title="Esc">×</button>
+        </div>
+        <div id="detailBody"></div>
+      </aside>
     </section>
   </div>
 
