@@ -18,7 +18,7 @@ Run Claude Code in four terminals and you lose track of which one is waiting on 
 - ✅ **A detail panel per session** (ⓘ) — tokens, messages, tool calls, subagents, working time, and how full the context window is. [More](#session-details)
 - ✅ **Where the standing context goes** — which `CLAUDE.md`, the MCP instructions, the tool and agent listings, and **tokens per skill**: the skills loaded in the session and each skill's share of the listing sent on every turn.
 - ✅ **Your limits** — this session's context, the five-hour window and the weekly window (used, remaining, reset time) in the status bar. Amber at 70%, red at 90%.
-- ✅ **Model, effort and folder on launch** — pick the model the way Claude Code's `/model` shows it, effort from auto to max, and the folder to start in; each button shows the exact `claude` command it runs. The last choices are remembered.
+- ✅ **Model, effort and folder on launch** — pick the model the way Claude Code's `/model` shows it, effort from auto to max, and the folder to start in; each button shows the exact `claude` command it runs. The last choices are remembered. [See it](#starting-a-session)
 - ✅ **Light and dark** — follows macOS, or pick one. The terminal follows too.
 - ✅ **Open at login** — one checkbox in the status bar starts ClaudeTerm when you log in (in the built app; `npm start` leaves it off).
 - ✅ **Several sessions in one window**, renameable — including ones running in other terminals (double-click a title) — GPU-rendered (WebGL) for fast scrolling.
@@ -49,6 +49,12 @@ cp -R dist/mac-arm64/ClaudeTerm.app /Applications/    # Intel Macs: dist/mac/
 Then open it from Spotlight (⌘ Space → ClaudeTerm). `npm run dist` builds a `.dmg` instead.
 
 Or open the folder in Claude Code and ask: *"build and run this app"*.
+
+## Starting a session
+
+**+ New session** asks how Claude Code should start: the model, the effort level, and the folder. Each button shows the exact command it will run, so nothing is hidden. Resuming a session from *History* opens the same dialog, in that session's own folder.
+
+![The launch dialog: a model list with Opus 5.5 selected, effort set to Medium, the ~/Developer folder, and the claude command each button runs](docs/launch.png)
 
 ## Session details
 
