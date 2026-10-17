@@ -1,27 +1,34 @@
 # ClaudeTerm
 
-A small macOS terminal that opens straight into [Claude Code](https://claude.com/claude-code) and keeps your usage in view.
+[![license](https://img.shields.io/github/license/eyupcimen/claude-term)](./LICENSE)
+![platform](https://img.shields.io/badge/platform-macOS-lightgrey)
+![electron](https://img.shields.io/badge/electron-44-47848f)
+
+**Get more out of every Claude Code session.** A macOS terminal that opens straight into [Claude Code](https://claude.com/claude-code) and keeps your sessions, your context and your limits in view.
 
 ![ClaudeTerm: sessions with model and live status on the left, Claude Code in the middle, session details on the right](docs/screenshot.png)
 
-- Sidebar with all your Claude Code sessions: open ones on top, past ones below (click to resume in the original folder)
-- Each open session shows its model (e.g. `Opus 5.5`) and live status: busy, waiting for you, or idle
-- "Other terminals" lists Claude Code sessions running outside ClaudeTerm, so you can see them all in one place
-- Session details (ⓘ): tokens, messages, tool calls, subagents, working time, how full the context window is, and what the static context is made of — CLAUDE.md files, MCP instructions, tool and agent listings, and tokens per skill (both the skills loaded in the session and each skill's share of the listing sent every turn)
-- Light and dark theme (follows the system, or pick one); the terminal follows it too
-- Several sessions side by side in one window; the selected one fills the right side
-- Rename any session — double-click its title or use ✎. Names are kept across restarts
-- GPU-rendered terminal (WebGL) for fast scrolling
-- Asks on launch: normal mode or `--dangerously-skip-permissions`, which model (Haiku 4.5, Sonnet 5, Opus 5.5, Fable 5.1 — Sonnet by default) and effort level (lower effort uses fewer tokens). Your last choice is remembered
-- Status bar: this session's context tokens, 5-hour limit and weekly limit (used / remaining / reset time)
-- Window title shows the current project
-- UI in English, German, Turkish and Spanish (follows the system language, switchable from the 🌐 menu)
+Run Claude Code in four terminals and you lose track of which one is waiting on you, which is still working, and how much of your five-hour window is left. Claude Code already writes all of that to `~/.claude`. ClaudeTerm reads it — nothing else — and puts it next to the terminal you are typing in.
 
-Usage data comes from Claude Code's own status line feed, passed in per window via `--settings`. Your `~/.claude/settings.json` is not modified. Session status and details are read from the files Claude Code writes under `~/.claude` (read-only, nothing leaves your machine). The session detail view is inspired by [claude-code-session-tracker](https://github.com/meyusufdemirci/claude-code-session-tracker).
+## What you get
+
+- ✅ **Every session in one sidebar** — open ones on top, past ones below. Click a past one to resume it in its original folder.
+- ✅ **The model and status of each session** — `Opus 5.5`, `Sonnet 5`, `Haiku 4.5` in orange beside the title, and whether it is busy, waiting for you, or idle.
+- ✅ **Sessions from other terminals** — Claude Code running in iTerm, VS Code or anywhere else shows up under *Other terminals*, with the same status.
+- ✅ **A detail panel per session** (ⓘ) — tokens, messages, tool calls, subagents, working time, and how full the context window is. [More](#session-details)
+- ✅ **Where the standing context goes** — which `CLAUDE.md`, the MCP instructions, the tool and agent listings, and **tokens per skill**: the skills loaded in the session and each skill's share of the listing sent on every turn.
+- ✅ **Your limits** — this session's context, the five-hour window and the weekly window (used, remaining, reset time) in the status bar. Amber at 70%, red at 90%.
+- ✅ **Model and effort on launch** — normal or `--dangerously-skip-permissions`, Haiku 4.5 / Sonnet 5 / Opus 5.5 / Fable 5.1, and effort from low to max. The last choice is remembered.
+- ✅ **Light and dark** — follows macOS, or pick one. The terminal follows too.
+- ✅ **Several sessions in one window**, renameable (double-click a title), GPU-rendered (WebGL) for fast scrolling.
+- ✅ **English, German, Turkish and Spanish** — follows the system language, switchable from 🌐.
+- ✅ **No changes to your Claude Code setup**, no telemetry, no network calls of its own. [More](#privacy)
 
 ## Build it yourself
 
-No prebuilt binaries — clone and build on your own Mac. Requirements: macOS, Node.js 20+, Xcode Command Line Tools, and Claude Code installed and logged in.
+No prebuilt binaries — clone and build on your own Mac. A locally built app isn't quarantined, so macOS opens it without the Gatekeeper warning.
+
+Requirements: macOS, Node.js 20+, Xcode Command Line Tools, and Claude Code installed and logged in.
 
 ```sh
 git clone https://github.com/eyupcimen/claude-term.git
@@ -29,21 +36,80 @@ cd claude-term
 npm install
 npx electron-rebuild
 npm start          # run it
-npm run dist       # or build ClaudeTerm.app + dmg into dist/
 ```
 
-To install it like any other app, build the `.app` only and copy it to Applications:
+To install it like any other app, build the `.app` and copy it to Applications:
 
 ```sh
 npx electron-builder --mac dir
 cp -R dist/mac-arm64/ClaudeTerm.app /Applications/    # Intel Macs: dist/mac/
 ```
 
-Then open it from Spotlight (⌘ Space → ClaudeTerm).
+Then open it from Spotlight (⌘ Space → ClaudeTerm). `npm run dist` builds a `.dmg` instead.
 
 Or open the folder in Claude Code and ask: *"build and run this app"*.
 
-A locally built app isn't quarantined, so macOS opens it without the Gatekeeper warning.
+## Session details
+
+Hover any session and click **ⓘ** — open, from another terminal, or from history. The panel slides in from the right; **Esc** closes it. While the session is running it refreshes every few seconds.
+
+| Section | What it shows |
+| --- | --- |
+| Tokens | Input, output, total, cache read and cache write, summed over every turn |
+| Activity | Your messages, Claude's turns, tool calls, subagents, working time, and elapsed time without idle gaps |
+| Context window | How much of the model's window the last turn used: the static block, the conversation, and what is free |
+| Static context | What the window holds before you type anything — each `CLAUDE.md`, the skill listing, deferred tools, agents, MCP instructions, and the system prompt and built-in tool schemas |
+| Skills | Skills loaded during the session with their token cost, and each skill's line in the listing every turn carries |
+| Tools | Tool calls by name |
+| Resume | A copyable `claude --resume <id>` |
+
+The static block is measured from the first turn. The named rows are estimated from the text each block put in the window (four characters to a token); whatever they don't account for is the system prompt and tool schemas, which are never written to disk.
+
+## Keyboard and mouse
+
+| Key | Does |
+| --- | --- |
+| <kbd>Esc</kbd> | Close the detail panel |
+| Double-click a title | Rename the session |
+| <kbd>↵</kbd> / <kbd>Esc</kbd> while renaming | Save / cancel (an empty name restores the automatic title) |
+| <kbd>⌘</kbd> <kbd>Q</kbd> | Quit — waits for every session to exit cleanly |
+
+## Privacy
+
+Read-only, local, and no telemetry.
+
+- **Limits and context** come from Claude Code's own status line feed. ClaudeTerm passes its status line command in per window with `--settings`; your `~/.claude/settings.json` is not modified.
+- **Running sessions** are read from `~/.claude/sessions/*.json`, each checked against a real process so a stale file or a recycled PID never shows up as running.
+- **Session details and history** are read from the transcripts in `~/.claude/projects/`.
+- **What it writes:** only its own app data — the status line settings file, one small status file per open session (deleted when it closes), and your chosen titles, language, theme, model and effort.
+- **Network:** none. ClaudeTerm makes no requests of its own; Claude Code talks to Anthropic as it always does.
+
+## FAQ
+
+**Does it change my Claude Code settings?**
+No. The status line it needs is passed per window with `--settings`, so your own settings and status line stay as they are.
+
+**Why are the limits empty at first?**
+Claude Code sends them with its first status line update after a reply. Ask anything and they appear.
+
+**Are the per-skill token counts exact?**
+They are estimates from the text, at four characters to a token, scaled to fit the static block that was actually billed. Good for seeing which skills are heavy, not for accounting.
+
+**Can I attach to a session from another terminal?**
+No — it is shown and inspectable, but its terminal belongs to the other app. Once it ends it moves to *History*, where you can resume it here.
+
+**Why does Claude Code look washed out in the light theme?**
+Claude Code picks its colours for its own theme. Run `/theme` inside Claude Code and choose a light one.
+
+**Why no prebuilt download?**
+Without an Apple Developer ID a downloaded app gets the "unidentified developer" warning. Building it yourself avoids that.
+
+**Windows or Linux?**
+macOS only for now.
+
+## Credits
+
+The session detail view and live status are inspired by [claude-code-session-tracker](https://github.com/meyusufdemirci/claude-code-session-tracker) by [@meyusufdemirci](https://github.com/meyusufdemirci).
 
 ## License
 
