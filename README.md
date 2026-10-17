@@ -22,7 +22,7 @@ Run Claude Code in four terminals and you lose track of which one is waiting on 
 - ✅ **Light and dark** — follows macOS, or pick one. The terminal follows too.
 - ✅ **Open at login** — one checkbox in the status bar starts ClaudeTerm when you log in (in the built app; `npm start` leaves it off).
 - ✅ **Several sessions in one window**, renameable (double-click a title), GPU-rendered (WebGL) for fast scrolling.
-- ✅ **English, German, Turkish and Spanish** — follows the system language, switchable from 🌐.
+- ✅ **English, German, Turkish and Spanish** — English by default, switchable from 🌐; the choice is remembered.
 - ✅ **No changes to your Claude Code setup**, no telemetry, no network calls of its own. [More](#privacy)
 
 ## Build it yourself

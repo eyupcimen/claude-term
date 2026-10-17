@@ -344,8 +344,7 @@ function detectLang() {
     const saved = localStorage.getItem('claudeterm-lang');
     if (saved && SUPPORTED_LANGS.includes(saved)) return saved;
   } catch {}
-  const sys = (navigator.language || 'en').slice(0, 2).toLowerCase();
-  return SUPPORTED_LANGS.includes(sys) ? sys : 'en';
+  return 'en'; // English unless the user picks another language from the 🌐 menu
 }
 
 function setLang(lang) {
