@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, nativeTheme } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -372,6 +372,19 @@ ipcMain.handle('login-item-set', (_e, enabled) => {
   if (!app.isPackaged) return false;
   app.setLoginItemSettings({ openAtLogin: !!enabled });
   return app.getLoginItemSettings().openAtLogin;
+});
+// ~/Developer when there is one, else home. See chosenFolder in renderer.js.
+ipcMain.handle('folder-default', () => {
+  const home = os.homedir();
+  const dev = path.join(home, 'Developer');
+  return { home, folder: fs.existsSync(dev) ? dev : home };
+});
+ipcMain.handle('folder-pick', async (_e, current) => {
+  const res = await dialog.showOpenDialog(win, {
+    defaultPath: current || os.homedir(),
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  return res.canceled ? null : res.filePaths[0];
 });
 ipcMain.handle('sessions-live', () => listLive());
 ipcMain.handle('session-detail', (_e, id) => readDetail(id));

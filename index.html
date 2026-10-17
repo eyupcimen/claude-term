@@ -624,8 +624,11 @@
       border: 1px solid var(--line);
       border-top: 2px solid var(--accent);
       border-radius: 10px;
-      padding: 24px 28px;
-      width: 420px;
+      padding: 22px 26px;
+      width: 480px;
+      max-height: calc(100vh - 40px);
+      overflow-y: auto;
+      box-sizing: border-box;
       color: var(--text);
     }
     #launchModal h2 {
@@ -641,31 +644,155 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    #launchModal .modelRow {
+    .pickLabel {
+      margin: 16px 0 7px;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+    .optList {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .opt {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      font-size: 13px;
-      color: var(--text-2);
+      gap: 10px;
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--bg);
+      color: var(--text);
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
     }
-    #modelHint {
-      margin: 8px 0 4px;
+    .opt:hover {
+      border-color: var(--text-3);
+    }
+    .opt.selected {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .optText {
+      flex: 1;
+      min-width: 0;
+    }
+    .optName {
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .opt.selected .optName {
+      color: var(--accent);
+    }
+    .optDesc {
+      margin-top: 1px;
       font-size: 11.5px;
       color: var(--text-3);
     }
-    #modelPicker,
-    #effortPicker {
-      background: var(--bg-3);
-      color: var(--text);
+    .opt .check {
+      color: var(--accent);
+      visibility: hidden;
+    }
+    .opt.selected .check {
+      visibility: visible;
+    }
+    .seg {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
       border: 1px solid var(--line);
-      border-radius: 6px;
-      padding: 4px 8px;
-      font-size: 13px;
+      border-radius: 7px;
+      overflow: hidden;
+    }
+    .segBtn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 6px 2px;
+      border: none;
+      border-left: 1px solid var(--line);
+      background: var(--bg);
+      color: var(--text-2);
+      font-size: 11px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .segBtn:first-child {
+      border-left: none;
+    }
+    .meter {
+      display: flex;
+      gap: 2px;
+      height: 10px;
+      align-items: center;
+    }
+    .meter i {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      border: 1px solid currentColor;
+      opacity: 0.45;
+    }
+    .meter i.on {
+      background: currentColor;
+      opacity: 1;
+    }
+    .meter.auto i {
+      border-style: dashed;
+    }
+    .segBtn:hover {
+      color: var(--text);
+    }
+    .segBtn.selected {
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    #effortHint {
+      margin: 7px 0 0;
+      font-size: 11.5px;
+      color: var(--text-3);
+    }
+    .folderRow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 6px 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--bg);
+    }
+    #folderPath {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: var(--mono);
+      font-size: 11.5px;
+    }
+    #btnFolder {
+      background: none;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      color: var(--text-2);
+      font-size: 11.5px;
+      padding: 3px 9px;
+      cursor: pointer;
+    }
+    #btnFolder:hover {
+      border-color: var(--accent);
+      color: var(--text);
     }
     #launchModal .modeBtn {
       display: block;
       width: 100%;
-      margin-top: 10px;
+      margin-top: 8px;
       padding: 10px 12px;
       border-radius: 8px;
       border: 1px solid var(--line);
@@ -680,10 +807,16 @@
     }
     #launchModal .modeBtn .cmd {
       display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
       color: var(--accent);
       font-family: var(--mono);
       font-size: 11.5px;
       margin-top: 3px;
+    }
+    #btnNormal {
+      margin-top: 16px;
     }
     #btnCancel {
       margin-top: 12px;
@@ -753,22 +886,23 @@
     <div class="box">
       <h2 id="launchTitle">How should Claude Code start?</h2>
       <p id="launchSubtitle"></p>
-      <label class="modelRow">
-        <span id="modelLabel">Model</span>
-        <select id="modelPicker"></select>
-      </label>
-      <label class="modelRow" style="margin-top: 8px">
-        <span id="effortLabel">Effort</span>
-        <select id="effortPicker"></select>
-      </label>
-      <p id="modelHint"></p>
+      <div class="pickLabel" id="modelLabel">Model</div>
+      <div id="modelList" class="optList"></div>
+      <div class="pickLabel" id="effortLabel">Effort</div>
+      <div id="effortSeg" class="seg"></div>
+      <p id="effortHint"></p>
+      <div class="pickLabel" id="folderLabel">Folder</div>
+      <div class="folderRow">
+        <code id="folderPath"></code>
+        <button id="btnFolder" type="button">Change…</button>
+      </div>
       <button class="modeBtn" id="btnNormal">
         <span id="launchNormalLabel">Normal</span>
-        <span class="cmd">claude</span>
+        <span class="cmd" id="cmdNormal">claude</span>
       </button>
       <button class="modeBtn" id="btnSkipPerm">
         <span id="launchSkipLabel">Skip permission prompts</span>
-        <span class="cmd">claude --dangerously-skip-permissions</span>
+        <span class="cmd" id="cmdSkip">claude --dangerously-skip-permissions</span>
       </button>
       <button id="btnCancel">Cancel</button>
     </div>

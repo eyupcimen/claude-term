@@ -230,19 +230,24 @@ window.claudeTerm.onStatusUpdate((msg) => {
 
 // --- Launch modal ----------------------------------------------------------
 
-const modelPicker = $('modelPicker');
-const effortPicker = $('effortPicker');
-
-// Full model names pin an exact version; `hint` is an i18n key. Prices are
-// $ per million input/output tokens and track how fast plan limits drain.
+// Laid out like Claude Code's own /model picker: one row per model with what it
+// is good for, the chosen one ticked. Full ids pin an exact version.
 const MODELS = [
-  { value: '', label: null },
-  { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5 · $1/$5', hint: 'hintCheapest' },
-  { value: 'claude-sonnet-5', label: 'Sonnet 5 · $2/$10', hint: 'hintBalanced' },
-  { value: 'claude-opus-5-5', label: 'Opus 5.5 · $4/$20', hint: 'hintStrong' },
-  { value: 'claude-fable-5-1', label: 'Fable 5.1', hint: 'hintFable' },
+  { value: '', name: null, desc: 'modelDescDefault' },
+  { value: 'claude-opus-5-5', name: 'Opus 5.5', desc: 'modelDescOpus' },
+  { value: 'claude-sonnet-5', name: 'Sonnet 5', desc: 'modelDescSonnet' },
+  { value: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5', desc: 'modelDescHaiku' },
+  { value: 'claude-fable-5-1', name: 'Fable 5.1', desc: 'modelDescFable' },
 ];
 const EFFORTS = ['', 'low', 'medium', 'high', 'xhigh', 'max'];
+// How many of five dots each effort level fills; auto shows them all hollow.
+const EFFORT_LEVEL = { '': 0, low: 1, medium: 2, high: 3, xhigh: 4, max: 5 };
+
+function effortMeter(e) {
+  const meter = el('span', 'meter' + (e ? '' : ' auto'));
+  for (let i = 1; i <= 5; i++) meter.appendChild(el('i', i <= EFFORT_LEVEL[e] ? 'on' : null));
+  return meter;
+}
 // Older versions of the app saved bare aliases.
 const LEGACY_MODELS = {
   sonnet: 'claude-sonnet-5',
@@ -259,51 +264,90 @@ function loadChoice(key, valid, fallback) {
   return fallback;
 }
 
-// Sonnet by default: half the per-token price of Opus, so it uses up plan limits slower.
+// Sonnet by default: it uses up plan limits about half as fast as Opus.
 let chosenModel = loadChoice('claudeterm-model', MODELS.map((m) => m.value), 'claude-sonnet-5');
 let chosenEffort = loadChoice('claudeterm-effort', EFFORTS, '');
+// Where new sessions start. Not the home folder by default: Claude Code indexes
+// its working folder, and in ~ that reaches Desktop, Documents and Downloads,
+// each of which macOS asks about separately.
+let chosenFolder = null;
+try {
+  chosenFolder = localStorage.getItem('claudeterm-folder');
+} catch {}
 
 function fillLaunchPickers() {
-  modelPicker.replaceChildren(
-    ...MODELS.map((m) => {
-      const o = el('option', null, m.label || t(currentLang, 'modelDefault'));
-      o.value = m.value;
-      return o;
-    })
-  );
-  effortPicker.replaceChildren(
-    ...EFFORTS.map((e) => {
-      const o = el('option', null, t(currentLang, e ? 'effort_' + e : 'modelDefault'));
-      o.value = e;
-      return o;
-    })
-  );
-  modelPicker.value = chosenModel;
-  effortPicker.value = chosenEffort;
-  renderModelHint();
+  const list = $('modelList');
+  list.replaceChildren();
+  for (const m of MODELS) {
+    const row = el('button', 'opt' + (m.value === chosenModel ? ' selected' : ''));
+    row.type = 'button';
+    const text = el('div', 'optText');
+    text.appendChild(el('div', 'optName', m.name || t(currentLang, 'modelDefault')));
+    text.appendChild(el('div', 'optDesc', t(currentLang, m.desc)));
+    row.appendChild(text);
+    row.appendChild(el('span', 'check', '✔'));
+    row.addEventListener('click', () => {
+      chosenModel = m.value;
+      fillLaunchPickers();
+    });
+    list.appendChild(row);
+  }
+
+  const seg = $('effortSeg');
+  seg.replaceChildren();
+  for (const e of EFFORTS) {
+    const b = el('button', 'segBtn' + (e === chosenEffort ? ' selected' : ''));
+    b.type = 'button';
+    b.appendChild(effortMeter(e));
+    b.appendChild(el('span', null, t(currentLang, e ? 'effort_' + e : 'effortAuto')));
+    b.addEventListener('click', () => {
+      chosenEffort = e;
+      fillLaunchPickers();
+    });
+    seg.appendChild(b);
+  }
+  $('effortHint').textContent = t(currentLang, 'effortDesc_' + (chosenEffort || 'auto'));
+  renderLaunchCommands();
 }
 
-function renderModelHint() {
-  const m = MODELS.find((x) => x.value === modelPicker.value);
-  const parts = [];
-  if (m && m.hint) parts.push(t(currentLang, m.hint));
-  parts.push(t(currentLang, 'effortHint'));
-  $('modelHint').textContent = parts.join(' ');
+function shortDir(dir) {
+  return homeDir && dir && dir.startsWith(homeDir) ? '~' + dir.slice(homeDir.length) : dir || '~';
 }
 
-modelPicker.addEventListener('change', () => {
-  chosenModel = modelPicker.value;
-  renderModelHint();
-});
-effortPicker.addEventListener('change', () => {
-  chosenEffort = effortPicker.value;
+function launchFlags(extra) {
+  return [chosenModel ? `--model ${chosenModel}` : '', chosenEffort ? `--effort ${chosenEffort}` : '', extra]
+    .filter(Boolean)
+    .join(' ');
+}
+
+// The buttons show the exact command each one runs.
+function renderLaunchCommands() {
+  const resume = pendingResume ? ` --resume ${pendingResume.id.slice(0, 8)}…` : '';
+  $('cmdNormal').textContent = ['claude' + resume, launchFlags('')].filter(Boolean).join(' ');
+  $('cmdSkip').textContent = ['claude' + resume, launchFlags('--dangerously-skip-permissions')].join(' ');
+  $('folderPath').textContent = shortDir(pendingResume ? pendingResume.cwd : chosenFolder);
+  $('btnFolder').style.display = pendingResume ? 'none' : '';
+}
+
+$('btnFolder').addEventListener('click', async () => {
+  const dir = await window.claudeTerm.pickFolder(chosenFolder);
+  if (!dir) return;
+  chosenFolder = dir;
+  try {
+    localStorage.setItem('claudeterm-folder', dir);
+  } catch {}
+  renderLaunchCommands();
 });
 
-function openLaunchModal(resume) {
+async function openLaunchModal(resume) {
   pendingResume = resume || null;
+  const def = await window.claudeTerm.defaultFolder();
+  homeDir = def.home;
+  if (!chosenFolder) chosenFolder = def.folder;
   $('launchTitle').textContent = t(currentLang, resume ? 'resumeTitle' : 'launchTitle');
   $('launchSubtitle').textContent = resume ? resume.title : '';
   $('launchSubtitle').style.display = resume ? 'block' : 'none';
+  fillLaunchPickers();
   $('launchModal').classList.add('open');
 }
 
@@ -313,22 +357,18 @@ function closeLaunchModal() {
 }
 
 async function launch(extraFlags) {
-  const model = modelPicker.value;
-  const effort = effortPicker.value;
   try {
-    localStorage.setItem('claudeterm-model', model);
-    localStorage.setItem('claudeterm-effort', effort);
+    localStorage.setItem('claudeterm-model', chosenModel);
+    localStorage.setItem('claudeterm-effort', chosenEffort);
   } catch {}
-  const flags = [model ? `--model ${model}` : '', effort ? `--effort ${effort}` : '', extraFlags]
-    .filter(Boolean)
-    .join(' ');
+  const flags = launchFlags(extraFlags);
   const resume = pendingResume;
   closeLaunchModal();
 
   const { id, cwd, home } = await window.claudeTerm.createSession({
     flags,
     resumeId: resume?.id,
-    cwd: resume?.cwd,
+    cwd: resume ? resume.cwd : chosenFolder,
   });
   homeDir = home;
   sessions.set(id, {
@@ -495,9 +535,9 @@ function renderSidebar() {
     const item = el('div', 'item external');
     const title = titles[l.id] || l.title || l.name || projectName(l.cwd);
     item.title = title;
-    nameRow(item, title, l.status, l.model);
+    const name = nameRow(item, title, l.status, l.model);
     metaRow(item, projectName(l.cwd), l.status);
-    itemActions(item, null, title, null, null, l.id);
+    itemActions(item, name, title, (v) => saveTitle(l.id, v), null, l.id);
     item.addEventListener('click', () => openDetail(l.id));
     ext.appendChild(item);
   }
@@ -850,6 +890,8 @@ function applyLang() {
   $('launchSkipLabel').textContent = t(currentLang, 'launchSkipPerm');
   $('modelLabel').textContent = t(currentLang, 'model');
   $('effortLabel').textContent = t(currentLang, 'effort');
+  $('folderLabel').textContent = t(currentLang, 'folder');
+  $('btnFolder').textContent = t(currentLang, 'change');
   fillLaunchPickers();
   $('btnCancel').textContent = t(currentLang, 'cancel');
   render();

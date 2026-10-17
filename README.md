@@ -18,10 +18,10 @@ Run Claude Code in four terminals and you lose track of which one is waiting on 
 - ✅ **A detail panel per session** (ⓘ) — tokens, messages, tool calls, subagents, working time, and how full the context window is. [More](#session-details)
 - ✅ **Where the standing context goes** — which `CLAUDE.md`, the MCP instructions, the tool and agent listings, and **tokens per skill**: the skills loaded in the session and each skill's share of the listing sent on every turn.
 - ✅ **Your limits** — this session's context, the five-hour window and the weekly window (used, remaining, reset time) in the status bar. Amber at 70%, red at 90%.
-- ✅ **Model and effort on launch** — normal or `--dangerously-skip-permissions`, Haiku 4.5 / Sonnet 5 / Opus 5.5 / Fable 5.1, and effort from low to max. The last choice is remembered.
+- ✅ **Model, effort and folder on launch** — pick the model the way Claude Code's `/model` shows it, effort from auto to max, and the folder to start in; each button shows the exact `claude` command it runs. The last choices are remembered.
 - ✅ **Light and dark** — follows macOS, or pick one. The terminal follows too.
 - ✅ **Open at login** — one checkbox in the status bar starts ClaudeTerm when you log in (in the built app; `npm start` leaves it off).
-- ✅ **Several sessions in one window**, renameable (double-click a title), GPU-rendered (WebGL) for fast scrolling.
+- ✅ **Several sessions in one window**, renameable — including ones running in other terminals (double-click a title) — GPU-rendered (WebGL) for fast scrolling.
 - ✅ **English, German, Turkish and Spanish** — English by default, switchable from 🌐; the choice is remembered.
 - ✅ **No changes to your Claude Code setup**, no telemetry, no network calls of its own. [More](#privacy)
 
@@ -98,6 +98,9 @@ They are estimates from the text, at four characters to a token, scaled to fit t
 
 **Can I attach to a session from another terminal?**
 No — it is shown and inspectable, but its terminal belongs to the other app. Once it ends it moves to *History*, where you can resume it here.
+
+**Why does macOS ask for access to Desktop, Documents or Downloads?**
+Claude Code indexes the folder it starts in. Started in your home folder, that reaches every protected folder at once, so new sessions start in `~/Developer` (or the folder you pick) instead; macOS then only asks when a session actually works there. Each rebuild of the app is a new ad-hoc signature, so macOS may ask again after you rebuild.
 
 **Why does Claude Code look washed out in the light theme?**
 Claude Code picks its colours for its own theme. Run `/theme` inside Claude Code and choose a light one.
