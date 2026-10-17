@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('claudeTerm', {
   listHistory: () => ipcRenderer.invoke('history-list'),
   listLive: () => ipcRenderer.invoke('sessions-live'),
   sessionDetail: (id) => ipcRenderer.invoke('session-detail', id),
+  getLoginItem: () => ipcRenderer.invoke('login-item-get'),
+  setLoginItem: (enabled) => ipcRenderer.invoke('login-item-set', enabled),
   sendInput: (id, data) => ipcRenderer.send('pty-input', { id, data }),
   resize: (id, cols, rows) => ipcRenderer.send('pty-resize', { id, cols, rows }),
   onPtyData: (cb) => ipcRenderer.on('pty-data', (_e, msg) => cb(msg)),

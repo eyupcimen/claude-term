@@ -362,6 +362,17 @@ function createWindow() {
 
 ipcMain.handle('session-create', (_e, opts) => createSession(opts));
 ipcMain.handle('history-list', () => ({ home: os.homedir(), items: listHistory() }));
+// Login items register the running executable, so under `npm start` this would
+// start a bare Electron at login. Only the built app offers it.
+ipcMain.handle('login-item-get', () => ({
+  available: app.isPackaged,
+  enabled: app.isPackaged && app.getLoginItemSettings().openAtLogin,
+}));
+ipcMain.handle('login-item-set', (_e, enabled) => {
+  if (!app.isPackaged) return false;
+  app.setLoginItemSettings({ openAtLogin: !!enabled });
+  return app.getLoginItemSettings().openAtLogin;
+});
 ipcMain.handle('sessions-live', () => listLive());
 ipcMain.handle('session-detail', (_e, id) => readDetail(id));
 ipcMain.on('session-close', (_e, id) => closeSession(id));

@@ -20,6 +20,7 @@ Run Claude Code in four terminals and you lose track of which one is waiting on 
 - ✅ **Your limits** — this session's context, the five-hour window and the weekly window (used, remaining, reset time) in the status bar. Amber at 70%, red at 90%.
 - ✅ **Model and effort on launch** — normal or `--dangerously-skip-permissions`, Haiku 4.5 / Sonnet 5 / Opus 5.5 / Fable 5.1, and effort from low to max. The last choice is remembered.
 - ✅ **Light and dark** — follows macOS, or pick one. The terminal follows too.
+- ✅ **Open at login** — one checkbox in the status bar starts ClaudeTerm when you log in (in the built app; `npm start` leaves it off).
 - ✅ **Several sessions in one window**, renameable (double-click a title), GPU-rendered (WebGL) for fast scrolling.
 - ✅ **English, German, Turkish and Spanish** — follows the system language, switchable from 🌐.
 - ✅ **No changes to your Claude Code setup**, no telemetry, no network calls of its own. [More](#privacy)
@@ -81,7 +82,7 @@ Read-only, local, and no telemetry.
 - **Limits and context** come from Claude Code's own status line feed. ClaudeTerm passes its status line command in per window with `--settings`; your `~/.claude/settings.json` is not modified.
 - **Running sessions** are read from `~/.claude/sessions/*.json`, each checked against a real process so a stale file or a recycled PID never shows up as running.
 - **Session details and history** are read from the transcripts in `~/.claude/projects/`.
-- **What it writes:** only its own app data — the status line settings file, one small status file per open session (deleted when it closes), and your chosen titles, language, theme, model and effort.
+- **What it writes:** only its own app data — the status line settings file, one small status file per open session (deleted when it closes), and your chosen titles, language, theme, model and effort. *Open at login* adds ClaudeTerm to macOS Login Items, and unticking it removes it.
 - **Network:** none. ClaudeTerm makes no requests of its own; Claude Code talks to Anthropic as it always does.
 
 ## FAQ

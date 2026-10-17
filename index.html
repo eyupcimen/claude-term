@@ -337,8 +337,31 @@
       padding: 2px 5px;
       cursor: pointer;
     }
-    .pickers select:hover {
+    .pickers select:hover,
+    .toggle:hover {
       border-color: var(--accent);
+    }
+    .toggle {
+      -webkit-app-region: no-drag;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--text-2);
+      font-size: 12px;
+      padding: 1px 7px 1px 4px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .toggle input {
+      margin: 0;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .toggle.disabled {
+      opacity: 0.5;
+      cursor: default;
     }
     #terminals {
       position: relative;
@@ -705,6 +728,7 @@
             <option value="es">🌐 ES</option>
           </select>
           <select id="themePicker"></select>
+          <label class="toggle" id="loginToggle"><input type="checkbox" id="loginCheck" /><span id="lblLogin">Open at login</span></label>
         </div>
         <span class="stat"><span class="label" id="lblContext">context:</span><span id="tokenCount">—</span></span>
         <span class="stat"><span class="label" id="lblFiveHour">5-hour limit:</span><span id="fiveHourLimit">—</span></span>

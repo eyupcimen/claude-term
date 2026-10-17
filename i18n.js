@@ -80,6 +80,8 @@ const TRANSLATIONS = {
     copy: 'Copy',
     copied: 'Copied',
     d_notFound: 'No transcript found for this session yet.',
+    openAtLogin: 'Open at login',
+    openAtLoginHint: 'Start ClaudeTerm when you log in to your Mac (built app only)',
   },
   de: {
     context: 'Kontext dieser Sitzung',
@@ -162,6 +164,8 @@ const TRANSLATIONS = {
     copy: 'Kopieren',
     copied: 'Kopiert',
     d_notFound: 'Für diese Sitzung gibt es noch kein Transkript.',
+    openAtLogin: 'Beim Anmelden öffnen',
+    openAtLoginHint: 'ClaudeTerm beim Anmelden am Mac starten (nur gebaute App)',
   },
   tr: {
     context: "bu oturum context'i",
@@ -244,6 +248,8 @@ const TRANSLATIONS = {
     copy: 'Kopyala',
     copied: 'Kopyalandı',
     d_notFound: 'Bu oturumun kaydı henüz yok.',
+    openAtLogin: 'Açılışta başlat',
+    openAtLoginHint: "Mac'e giriş yapınca ClaudeTerm'i aç (sadece derlenmiş uygulamada)",
   },
   es: {
     context: 'contexto de esta sesión',
@@ -326,6 +332,8 @@ const TRANSLATIONS = {
     copy: 'Copiar',
     copied: 'Copiado',
     d_notFound: 'Aún no hay transcripción para esta sesión.',
+    openAtLogin: 'Abrir al iniciar sesión',
+    openAtLoginHint: 'Abrir ClaudeTerm al iniciar sesión en el Mac (solo la app compilada)',
   },
 };
 

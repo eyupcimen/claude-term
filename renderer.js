@@ -841,6 +841,8 @@ function applyLang() {
   $('lblActive').textContent = t(currentLang, 'active');
   $('lblHistory').textContent = t(currentLang, 'history');
   $('lblExternal').textContent = t(currentLang, 'external');
+  $('lblLogin').textContent = t(currentLang, 'openAtLogin');
+  $('loginToggle').title = t(currentLang, 'openAtLoginHint');
   fillThemePicker();
   $('placeholder').textContent = t(currentLang, 'placeholder');
   $('launchTitle').textContent = t(currentLang, pendingResume ? 'resumeTitle' : 'launchTitle');
@@ -875,6 +877,19 @@ $('themePicker').addEventListener('change', (e) => {
   applyTheme();
 });
 
+// --- Open at login -----------------------------------------------------------
+
+async function initLoginItem() {
+  const { available, enabled } = await window.claudeTerm.getLoginItem();
+  $('loginCheck').checked = enabled;
+  $('loginCheck').disabled = !available;
+  $('loginToggle').classList.toggle('disabled', !available);
+}
+
+$('loginCheck').addEventListener('change', async (e) => {
+  e.target.checked = await window.claudeTerm.setLoginItem(e.target.checked);
+});
+
 $('langPicker').addEventListener('change', (e) => {
   currentLang = e.target.value;
   setLang(currentLang);
@@ -883,6 +898,7 @@ $('langPicker').addEventListener('change', (e) => {
 
 applyTheme();
 applyLang();
+initLoginItem();
 refreshHistory();
 pollLive();
 openLaunchModal(null);
