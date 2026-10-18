@@ -2,7 +2,6 @@
 // running right now (~/.claude/sessions) and, for one session, a full pass over
 // its transcript (tokens, activity, what the static context is made of).
 // Read-only; the formats are private, so every field is treated as optional.
-// Approach adapted from meyusufdemirci/claude-code-session-tracker (MIT).
 
 const fs = require('fs');
 const os = require('os');

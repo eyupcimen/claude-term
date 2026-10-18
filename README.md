@@ -117,10 +117,6 @@ Without an Apple Developer ID a downloaded app gets the "unidentified developer"
 **Windows or Linux?**
 macOS only for now.
 
-## Credits
-
-The session detail view and live status are inspired by [claude-code-session-tracker](https://github.com/meyusufdemirci/claude-code-session-tracker) by [@meyusufdemirci](https://github.com/meyusufdemirci).
-
 ## License
 
 MIT © [@eyupcimen](https://github.com/eyupcimen)
