@@ -15,6 +15,11 @@ let editing = false; // sidebar re-renders are paused while a title is being edi
 // ~/.claude/sessions. Ours get their status from it; the rest are listed apart.
 let live = new Map();
 let detailId = null; // session id whose detail panel is open
+// Sessions that finished a turn while you were looking elsewhere, by session id.
+// They blink until you open them, like sessions waiting on a permission prompt.
+const attention = new Set();
+const lastStatus = new Map(); // session id -> status at the previous poll
+const BLINK_MS = 1200;
 
 // User-chosen titles, keyed by Claude Code session id so they survive restarts
 // and follow a session from the active list into history.
@@ -163,6 +168,8 @@ function fitActive() {
 
 function setActive(id) {
   activeId = id;
+  const focused = sessions.get(id);
+  if (focused && focused.sessionId) attention.delete(focused.sessionId);
   for (const [sid, s] of sessions) s.pane.classList.toggle('visible', sid === id);
   $('placeholder').style.display = sessions.size ? 'none' : 'flex';
   const s = sessions.get(id);
@@ -471,6 +478,14 @@ function itemActions(item, nameEl, current, onSave, onClose, sessionId) {
   item.appendChild(actions);
 }
 
+// Blinking item for a session that needs you. The phase follows the clock, so
+// the sidebar re-rendering every poll doesn't restart the animation.
+function markAttention(item, sessionId, status) {
+  if (status !== 'waiting' && !attention.has(sessionId)) return;
+  item.classList.add('attention');
+  item.style.animationDelay = `-${Date.now() % BLINK_MS}ms`;
+}
+
 function statusPill(status) {
   return el('span', 'pill ' + status, t(currentLang, 'status_' + status));
 }
@@ -505,6 +520,8 @@ function renderSidebar() {
     item.title = title;
     const info = s.sessionId && live.get(s.sessionId);
     const status = info ? info.status : 'idle';
+    // No need to blink the session you are looking at.
+    if (id !== activeId || !document.hasFocus()) markAttention(item, s.sessionId, status);
     const name = nameRow(item, title, status, s.model || info?.model);
     const meta = [projectName(s.project)];
     if (s.contextTokens != null) meta.push(`${s.contextTokens.toLocaleString(locale())} tok`);
@@ -534,11 +551,15 @@ function renderSidebar() {
   for (const l of external) {
     const item = el('div', 'item external');
     const title = titles[l.id] || l.title || l.name || projectName(l.cwd);
-    item.title = title;
+    item.title = l.waitingFor ? `${title} — ${l.waitingFor}` : title;
+    markAttention(item, l.id, l.status);
     const name = nameRow(item, title, l.status, l.model);
     metaRow(item, projectName(l.cwd), l.status);
     itemActions(item, name, title, (v) => saveTitle(l.id, v), null, l.id);
-    item.addEventListener('click', () => openDetail(l.id));
+    item.addEventListener('click', () => {
+      attention.delete(l.id);
+      openDetail(l.id);
+    });
     ext.appendChild(item);
   }
 
@@ -563,6 +584,14 @@ async function pollLive() {
   try {
     const list = await window.claudeTerm.listLive();
     live = new Map(list.map((l) => [l.id, l]));
+    const focusedId = sessions.get(activeId)?.sessionId;
+    for (const l of list) {
+      const prev = lastStatus.get(l.id);
+      if (l.status === 'busy') attention.delete(l.id);
+      else if (prev === 'busy' && l.id !== focusedId) attention.add(l.id);
+      lastStatus.set(l.id, l.status);
+    }
+    for (const id of attention) if (!live.has(id)) attention.delete(id);
     renderSidebar();
   } catch {}
 }

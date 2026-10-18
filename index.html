@@ -23,6 +23,7 @@
       --amber: #d4a24c;
       --red: #d0675d;
       --scrim: rgba(0, 0, 0, 0.6);
+      --attention: rgba(212, 162, 76, 0.22);
       --mono: 'SF Mono', Menlo, monospace;
       color-scheme: dark;
     }
@@ -43,6 +44,7 @@
       --amber: #a87a1e;
       --red: #b5483e;
       --scrim: rgba(40, 36, 30, 0.35);
+      --attention: rgba(168, 122, 30, 0.18);
       color-scheme: light;
     }
 
@@ -203,6 +205,25 @@
     }
     .dot.idle {
       background: var(--text-3);
+    }
+    /* A session waiting for you: the row breathes amber until you open it */
+    .item.attention {
+      animation: attention 1.2s ease-in-out infinite;
+    }
+    .item.attention .dot {
+      background: var(--amber);
+      animation: none;
+    }
+    @keyframes attention {
+      0%,
+      100% {
+        background-color: transparent;
+        box-shadow: inset 2px 0 0 transparent;
+      }
+      50% {
+        background-color: var(--attention);
+        box-shadow: inset 2px 0 0 var(--amber);
+      }
     }
     @keyframes pulse {
       50% {

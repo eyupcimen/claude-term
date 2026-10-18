@@ -14,6 +14,7 @@ Run Claude Code in four terminals and you lose track of which one is waiting on 
 
 - ✅ **Every session in one sidebar** — open ones on top, past ones below. Click a past one to resume it in its original folder.
 - ✅ **The model and status of each session** — `Opus 5.5`, `Sonnet 5`, `Haiku 4.5` in orange beside the title, and whether it is busy, waiting for you, or idle.
+- ✅ **Blinks when Claude needs you** — a session waiting on a permission prompt or a question blinks amber, and so does one that finished while you were in another session, until you open it.
 - ✅ **Sessions from other terminals** — Claude Code running in iTerm, VS Code or anywhere else shows up under *Other terminals*, with the same status.
 - ✅ **A detail panel per session** (ⓘ) — tokens, messages, tool calls, subagents, working time, and how full the context window is. [More](#session-details)
 - ✅ **Where the standing context goes** — which `CLAUDE.md`, the MCP instructions, the tool and agent listings, and **tokens per skill**: the skills loaded in the session and each skill's share of the listing sent on every turn.
