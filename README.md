@@ -12,7 +12,8 @@ Run Claude Code in four terminals and you lose track of which one is waiting on 
 
 ## What you get
 
-- ✅ **Every session in one sidebar** — open ones on top, past ones below. Click a past one to resume it in its original folder.
+- ✅ **Every session in one sidebar** — open ones on top, past ones below. Click a past one to resume it in its original folder. Drag open sessions to reorder them.
+- ✅ **Picks up where you left off** — quit, restart or update ClaudeTerm and every open session reopens in its own folder, in the same order, with the same model and effort.
 - ✅ **The model and status of each session** — `Opus 5.5`, `Sonnet 5`, `Haiku 4.5` in orange beside the title, and whether it is busy, waiting for you, or idle.
 - ✅ **Blinks when Claude needs you** — a session waiting on a permission prompt or a question blinks amber, and so does one that finished while you were in another session, until you open it.
 - ✅ **Sessions from other terminals** — Claude Code running in iTerm, VS Code or anywhere else shows up under *Other terminals*, with the same status.
@@ -79,6 +80,7 @@ The static block is measured from the first turn. The named rows are estimated f
 | --- | --- |
 | <kbd>Esc</kbd> | Close the detail panel |
 | Double-click a title | Rename the session |
+| Drag a session | Move it up or down in the list |
 | <kbd>↵</kbd> / <kbd>Esc</kbd> while renaming | Save / cancel (an empty name restores the automatic title) |
 | <kbd>⌘</kbd> <kbd>Q</kbd> | Quit — waits for every session to exit cleanly |
 

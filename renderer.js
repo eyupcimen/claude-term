@@ -186,6 +186,7 @@ function removeSession(id) {
   s.term.dispose();
   s.pane.remove();
   sessions.delete(id);
+  saveOpenSessions();
   if (activeId === id) {
     const next = [...sessions.keys()].pop();
     setActive(next ?? null);
@@ -207,7 +208,10 @@ window.claudeTerm.onSessionExit(({ id }) => removeSession(id));
 window.claudeTerm.onStatusUpdate((msg) => {
   const s = sessions.get(msg.id);
   if (s) {
-    s.sessionId = msg.sessionId || s.sessionId;
+    if (msg.sessionId && msg.sessionId !== s.sessionId) {
+      s.sessionId = msg.sessionId;
+      saveOpenSessions();
+    }
     // A title typed before Claude Code reported its session id is saved now.
     if (s.customTitle !== undefined && s.sessionId) {
       saveTitle(s.sessionId, s.customTitle);
@@ -368,27 +372,71 @@ async function launch(extraFlags) {
     localStorage.setItem('claudeterm-model', chosenModel);
     localStorage.setItem('claudeterm-effort', chosenEffort);
   } catch {}
-  const flags = launchFlags(extraFlags);
   const resume = pendingResume;
   closeLaunchModal();
+  await startSession(launchFlags(extraFlags), resume, resume ? resume.cwd : chosenFolder);
+}
 
+// Opens a terminal running Claude Code. `resume` is { id, title } to continue a
+// past session; `flags` are kept so a restored session starts the same way.
+async function startSession(flags, resume, folder, focus = true) {
   const { id, cwd, home } = await window.claudeTerm.createSession({
     flags,
     resumeId: resume?.id,
-    cwd: resume ? resume.cwd : chosenFolder,
+    cwd: folder,
   });
   homeDir = home;
   sessions.set(id, {
     ...createTermPane(id),
     project: cwd,
+    startCwd: cwd,
+    flags,
     sessionId: resume?.id || null,
     aiTitle: resume?.title || null,
     contextTokens: null,
     contextPct: null,
     model: null,
   });
-  setActive(id);
-  if (resume) renderSidebar();
+  saveOpenSessions();
+  if (focus) setActive(id);
+  else {
+    sessions.get(id).pane.classList.remove('visible');
+    render();
+  }
+}
+
+// --- Reopen sessions after a restart --------------------------------------
+
+// Open sessions, in sidebar order, so quitting (or installing an update) and
+// starting again picks every one of them up where it was. Only sessions that
+// Claude Code has given an id can be resumed.
+function saveOpenSessions() {
+  const list = [...sessions.values()]
+    .filter((s) => s.sessionId)
+    .map((s) => ({ id: s.sessionId, cwd: s.startCwd, flags: s.flags || '', title: s.aiTitle || null }));
+  try {
+    localStorage.setItem('claudeterm-open', JSON.stringify(list));
+  } catch {}
+}
+
+async function restoreOpenSessions() {
+  let list = [];
+  try {
+    list = JSON.parse(localStorage.getItem('claudeterm-open') || '[]');
+  } catch {}
+  list = list.filter((r) => r && r.id);
+  // A session running elsewhere can't be resumed twice. Right after a restart
+  // the old Claude Code process may still be exiting and look alive, so give
+  // it a few seconds before counting it as taken.
+  for (let i = 0; i < 5 && list.some((r) => live.has(r.id)); i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    await pollLive();
+  }
+  list = list.filter((r) => !live.has(r.id));
+  for (const [i, r] of list.entries()) {
+    await startSession(r.flags, { id: r.id, title: r.title }, r.cwd, i === 0);
+  }
+  return list.length;
 }
 
 $('btnNew').addEventListener('click', () => openLaunchModal(null));
@@ -509,8 +557,51 @@ function metaRow(item, text, status) {
   item.appendChild(meta);
 }
 
+// --- Reorder by drag -------------------------------------------------------
+
+let dragId = null; // sidebar re-renders pause while a session is being dragged
+
+function moveSession(from, to, after) {
+  if (from === to) return;
+  const order = [...sessions.keys()].filter((k) => k !== from);
+  let at = order.indexOf(to);
+  if (after) at += 1;
+  order.splice(at, 0, from);
+  const entries = order.map((k) => [k, sessions.get(k)]);
+  sessions.clear();
+  for (const [k, v] of entries) sessions.set(k, v);
+  saveOpenSessions();
+}
+
+function makeDraggable(item, id) {
+  item.draggable = true;
+  item.addEventListener('dragstart', (e) => {
+    dragId = id;
+    e.dataTransfer.effectAllowed = 'move';
+    item.classList.add('dragging');
+  });
+  item.addEventListener('dragover', (e) => {
+    if (dragId === null || dragId === id) return;
+    e.preventDefault();
+    const r = item.getBoundingClientRect();
+    const after = e.clientY > r.top + r.height / 2;
+    item.classList.toggle('dropAfter', after);
+    item.classList.toggle('dropBefore', !after);
+  });
+  item.addEventListener('dragleave', () => item.classList.remove('dropAfter', 'dropBefore'));
+  item.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const after = item.classList.contains('dropAfter');
+    if (dragId !== null) moveSession(dragId, id, after);
+  });
+  item.addEventListener('dragend', () => {
+    dragId = null;
+    renderSidebar();
+  });
+}
+
 function renderSidebar() {
-  if (editing) return;
+  if (editing || dragId !== null) return;
   const active = $('activeList');
   active.replaceChildren();
   if (!sessions.size) active.appendChild(el('div', 'empty', t(currentLang, 'noActive')));
@@ -538,6 +629,7 @@ function renderSidebar() {
       s.sessionId
     );
     item.addEventListener('click', () => setActive(id));
+    makeDraggable(item, id);
     active.appendChild(item);
   }
 
@@ -971,5 +1063,7 @@ applyTheme();
 applyLang();
 initLoginItem();
 refreshHistory();
-pollLive();
-openLaunchModal(null);
+(async () => {
+  await pollLive();
+  if (!(await restoreOpenSessions())) openLaunchModal(null);
+})();
