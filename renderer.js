@@ -942,6 +942,17 @@ function renderDetail(d) {
     copy.textContent = t(currentLang, 'copied');
   });
   resume.appendChild(copy);
+  // Pasting the command into a running Claude prompt does nothing useful, so
+  // offer to open it in a new tab instead. Hidden while the session runs.
+  const running = live.has(d.id) || [...sessions.values()].some((s) => s.sessionId === d.id);
+  if (!running) {
+    const open = el('button', null, t(currentLang, 'resumeTitle'));
+    open.addEventListener('click', () => {
+      closeDetail();
+      openLaunchModal({ id: d.id, cwd: d.cwd, title: titles[d.id] || d.title || d.id.slice(0, 8) });
+    });
+    resume.appendChild(open);
+  }
   body.appendChild(section(null, resume));
 
   body.scrollTop = scroll;
