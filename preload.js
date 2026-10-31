@@ -1,12 +1,14 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('claudeTerm', {
+  platform: process.platform,
   createSession: (opts) => ipcRenderer.invoke('session-create', opts),
   closeSession: (id) => ipcRenderer.send('session-close', id),
   listHistory: () => ipcRenderer.invoke('history-list'),
   listLive: () => ipcRenderer.invoke('sessions-live'),
   sessionDetail: (id) => ipcRenderer.invoke('session-detail', id),
   defaultFolder: () => ipcRenderer.invoke('folder-default'),
+  installedAgents: () => ipcRenderer.invoke('agents-installed'),
   pickFolder: (current) => ipcRenderer.invoke('folder-pick', current),
   getLoginItem: () => ipcRenderer.invoke('login-item-get'),
   setLoginItem: (enabled) => ipcRenderer.invoke('login-item-set', enabled),

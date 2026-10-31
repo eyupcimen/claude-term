@@ -1,10 +1,10 @@
 # ClaudeTerm
 
 [![license](https://img.shields.io/github/license/eyupcimen/claude-term)](./LICENSE)
-![platform](https://img.shields.io/badge/platform-macOS-lightgrey)
+![platform](https://img.shields.io/badge/platform-macOS%20%2B%20Windows-lightgrey)
 ![electron](https://img.shields.io/badge/electron-44-47848f)
 
-**Get more out of every Claude Code session.** A macOS terminal that opens straight into [Claude Code](https://claude.com/claude-code) and keeps your sessions, your context and your limits in view.
+**Get more out of every Claude Code session.** A macOS and Windows terminal that opens straight into [Claude Code](https://claude.com/claude-code) and keeps your sessions, your context and your limits in view.
 
 ![ClaudeTerm: sessions with model and live status on the left, Claude Code in the middle, session details on the right](docs/screenshot.png)
 
@@ -12,6 +12,7 @@ Run Claude Code in four terminals and you lose track of which one is waiting on 
 
 ## What you get
 
+- ✅ **Claude Code, Codex, Gemini CLI, Copilot CLI or Antigravity CLI** — pick the agent when you start a session; agents that aren't installed are greyed out. Every agent gets the same sidebar, history, resume and restart restore; all but Antigravity also show busy/idle status. Codex also shows its own five-hour and weekly limits; the others don't record theirs.
 - ✅ **Every session in one sidebar** — open ones on top, past ones below. Click a past one to resume it in its original folder. Drag open sessions to reorder them.
 - ✅ **Picks up where you left off** — quit, restart or update ClaudeTerm and every open session reopens in its own folder, in the same order, with the same model and effort.
 - ✅ **The model and status of each session** — `Opus 5.5`, `Sonnet 5`, `Haiku 4.5` in orange beside the title, and whether it is busy, waiting for you, or idle.
@@ -19,7 +20,7 @@ Run Claude Code in four terminals and you lose track of which one is waiting on 
 - ✅ **Sessions from other terminals** — Claude Code running in iTerm, VS Code or anywhere else shows up under *Other terminals*, with the same status.
 - ✅ **A detail panel per session** (ⓘ) — tokens, messages, tool calls, subagents, working time, and how full the context window is. [More](#session-details)
 - ✅ **Where the standing context goes** — which `CLAUDE.md`, the MCP instructions, the tool and agent listings, and **tokens per skill**: the skills loaded in the session and each skill's share of the listing sent on every turn.
-- ✅ **Your limits** — this session's context, the five-hour window and the weekly window (used, remaining, reset time) in the status bar. Amber at 70%, red at 90%.
+- ✅ **Your limits** — this session's context, the five-hour window and the weekly window (used, remaining, reset time) in the status bar. Amber at 70%, red at 90%, and a notification once a window passes 90%.
 - ✅ **Model, effort and folder on launch** — pick the model the way Claude Code's `/model` shows it, effort from auto to max, and the folder to start in; each button shows the exact `claude` command it runs. The last choices are remembered. [See it](#starting-a-session)
 - ✅ **Light and dark** — follows macOS, or pick one. The terminal follows too.
 - ✅ **Open at login** — one checkbox in the status bar starts ClaudeTerm when you log in (in the built app; `npm start` leaves it off).
@@ -29,9 +30,9 @@ Run Claude Code in four terminals and you lose track of which one is waiting on 
 
 ## Build it yourself
 
-No prebuilt binaries — clone and build on your own Mac. A locally built app isn't quarantined, so macOS opens it without the Gatekeeper warning.
+No prebuilt binaries — clone and build locally.
 
-Requirements: macOS, Node.js 20+, Xcode Command Line Tools, and Claude Code installed and logged in.
+Requirements: macOS or Windows, Node.js 20+, Claude Code installed and logged in. macOS also needs Xcode Command Line Tools; Windows needs PowerShell and the native build tools required by `node-pty` if npm asks for them.
 
 ```sh
 git clone https://github.com/eyupcimen/claude-term.git
@@ -41,7 +42,7 @@ npx electron-rebuild
 npm start          # run it
 ```
 
-To install it like any other app, build the `.app` and copy it to Applications:
+On macOS, build the `.app` and copy it to Applications:
 
 ```sh
 npx electron-builder --mac dir
@@ -50,11 +51,13 @@ cp -R dist/mac-arm64/ClaudeTerm.app /Applications/    # Intel Macs: dist/mac/
 
 Then open it from Spotlight (⌘ Space → ClaudeTerm). `npm run dist` builds a `.dmg` instead.
 
+On Windows, run `npm run dist:win` on a Windows machine. It creates an NSIS installer and a portable executable under `dist/`.
+
 Or open the folder in Claude Code and ask: *"build and run this app"*.
 
 ## Starting a session
 
-**+ New session** asks how Claude Code should start: the model, the effort level, and the folder. Each button shows the exact command it will run, so nothing is hidden. Resuming a session from *History* opens the same dialog, in that session's own folder.
+**+ New session** asks which agent to start — Claude Code, Codex, Gemini CLI, Copilot CLI or Antigravity CLI (`agy`) — and how: the model (Claude Code only; the others use their own settings), the effort level (Claude Code and Codex), and the folder. Each button shows the exact command it will run, so nothing is hidden. Resuming a session from *History* opens the same dialog, in that session's own folder.
 
 ![The launch dialog: a model list with Opus 5.5 selected, effort set to Medium, the ~/Developer folder, and the claude command each button runs](docs/launch.png)
 
@@ -82,7 +85,7 @@ The static block is measured from the first turn. The named rows are estimated f
 | Double-click a title | Rename the session |
 | Drag a session | Move it up or down in the list |
 | <kbd>↵</kbd> / <kbd>Esc</kbd> while renaming | Save / cancel (an empty name restores the automatic title) |
-| <kbd>⌘</kbd> <kbd>Q</kbd> | Quit — waits for every session to exit cleanly |
+| <kbd>⌘</kbd> <kbd>Q</kbd> (macOS) / <kbd>Ctrl</kbd> <kbd>Q</kbd> (Windows) | Quit — waits for every session to exit cleanly |
 
 ## Privacy
 
@@ -91,6 +94,8 @@ Read-only, local, and no telemetry.
 - **Limits and context** come from Claude Code's own status line feed. ClaudeTerm passes its status line command in per window with `--settings`; your `~/.claude/settings.json` is not modified.
 - **Running sessions** are read from `~/.claude/sessions/*.json`, each checked against a real process so a stale file or a recycled PID never shows up as running.
 - **Session details and history** are read from the transcripts in `~/.claude/projects/`.
+- **Codex sessions** are read from Codex's own files: the rollout transcripts in `~/.codex/sessions/` and the thread names in `~/.codex/session_index.jsonl`. Nothing under `~/.codex` is written.
+- **Gemini CLI and Copilot CLI sessions** are read from `~/.gemini/tmp/*/chats/` and `~/.copilot/session-state/`. Copilot's format is undocumented, so its status is best effort. Antigravity CLI conversations in `~/.gemini/antigravity-cli/conversations/` are only listed by id and time; their contents aren't read. None of these folders is written.
 - **What it writes:** only its own app data — the status line settings file, one small status file per open session (deleted when it closes), and your chosen titles, language, theme, model and effort. *Open at login* adds ClaudeTerm to macOS Login Items, and unticking it removes it.
 - **Network:** none. ClaudeTerm makes no requests of its own; Claude Code talks to Anthropic as it always does.
 
@@ -118,7 +123,7 @@ Claude Code picks its colours for its own theme. Run `/theme` inside Claude Code
 Without an Apple Developer ID a downloaded app gets the "unidentified developer" warning. Building it yourself avoids that.
 
 **Windows or Linux?**
-macOS only for now.
+Windows is supported with PowerShell. Linux is not supported yet.
 
 ## License
 

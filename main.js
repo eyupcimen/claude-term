@@ -1,9 +1,21 @@
-const { app, BrowserWindow, dialog, ipcMain, nativeTheme } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, nativeTheme, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const pty = require('node-pty');
+const { spawnSync } = require('child_process');
 const { listLive, readDetail } = require('./sessions');
+const codex = require('./codex');
+const gemini = require('./gemini');
+const copilot = require('./copilot');
+const antigravity = require('./antigravity');
+const {
+  terminalShell,
+  buildStatusLineCommand,
+  buildClaudeLaunchCommand,
+  buildAgentLaunchCommand,
+  defaultWorkspace,
+} = require('./platform');
 
 // Under `npm start` the app would otherwise be called "Electron".
 app.setName('ClaudeTerm');
@@ -23,7 +35,10 @@ function writeSettingsFile() {
   fs.writeFileSync(
     file,
     JSON.stringify({
-      statusLine: { type: 'command', command: 'cat > "$CLAUDETERM_STATUS_FILE"' },
+      statusLine: {
+        type: 'command',
+        command: buildStatusLineCommand(process.execPath, path.join(__dirname, 'status-writer.js')),
+      },
     })
   );
   return file;
@@ -100,7 +115,103 @@ function watchStatusFile(id, statusFile) {
   }, 1000);
 }
 
-function createSession({ flags, resumeId, cwd }) {
+// Agents other than Claude Code have no status line hook. Each adapter finds
+// the log file a session writes and folds appended lines into a status.
+const ADAPTERS = {
+  codex: {
+    find: codex.findRollout,
+    findNew: codex.findNewRollout,
+    applyLines: codex.applyLines,
+    title: (state) => codex.threadNames().get(state.sessionId),
+  },
+  gemini: {
+    find: gemini.findSessionFile,
+    findNew: gemini.findNewSessionFile,
+    applyLines: gemini.applyLines,
+    title: (state) => state.title || null,
+  },
+  copilot: {
+    find: copilot.findSessionFile,
+    findNew: copilot.findNewSessionFile,
+    applyLines: copilot.applyLines,
+    title: (_state, file) => copilot.sessionTitle(file),
+    // Sessions live in a folder named after their id.
+    idFromFile: (file) => path.basename(path.dirname(file)),
+  },
+  // Its conversation files can't be read, only found.
+  antigravity: {
+    find: antigravity.findSessionFile,
+    findNew: antigravity.findNewSessionFile,
+    idFromFile: antigravity.idFromFile,
+    opaque: true,
+  },
+};
+
+// Finds the log file the session writes and reads what is appended to it,
+// sending the same update Claude Code's feed does.
+function watchAgentLog(id, agent, { cwd, resumeId, since }) {
+  const adapter = ADAPTERS[agent];
+  const session = sessions.get(id);
+  let offset = 0;
+  let rest = '';
+  let lastTitleCheck = 0;
+  let aiTitle = null;
+  const state = {};
+  return setInterval(() => {
+    if (!session.rollout) {
+      const taken = new Set([...sessions.values()].map((s) => s.rollout).filter(Boolean));
+      session.rollout = resumeId ? adapter.find(resumeId) : adapter.findNew(cwd, since, taken);
+      if (!session.rollout) return;
+    }
+    if (adapter.opaque) {
+      if (state.sessionId) return;
+      state.sessionId = adapter.idFromFile(session.rollout);
+      send('status-update', { id, agent, sessionId: state.sessionId, status: 'idle', project: cwd });
+      return;
+    }
+    let size;
+    try {
+      size = fs.statSync(session.rollout).size;
+    } catch {
+      return;
+    }
+    if (size <= offset) return;
+    const fd = fs.openSync(session.rollout, 'r');
+    let chunk;
+    try {
+      const buf = Buffer.alloc(size - offset);
+      fs.readSync(fd, buf, 0, buf.length, offset);
+      chunk = buf.toString('utf8');
+    } finally {
+      fs.closeSync(fd);
+    }
+    offset = size;
+    const lines = (rest + chunk).split('\n');
+    rest = lines.pop(); // incomplete last line
+    adapter.applyLines(state, lines);
+    if (!state.sessionId && adapter.idFromFile) state.sessionId = adapter.idFromFile(session.rollout);
+
+    if (state.sessionId && Date.now() - lastTitleCheck > TITLE_CHECK_MS) {
+      lastTitleCheck = Date.now();
+      aiTitle = adapter.title(state, session.rollout) || aiTitle;
+    }
+    send('status-update', {
+      id,
+      agent,
+      aiTitle,
+      sessionId: state.sessionId || resumeId || null,
+      status: state.status || 'idle',
+      contextTokens: state.contextTokens ?? null,
+      contextPct: state.contextPct ?? null,
+      model: state.model || null,
+      fiveHour: state.fiveHour || null,
+      weekly: state.weekly || null,
+      project: cwd,
+    });
+  }, 1000);
+}
+
+function createSession({ agent = 'claude', flags, resumeId, cwd }) {
   const id = nextId++;
   const statusFile = path.join(app.getPath('userData'), `status-${process.pid}-${id}.json`);
   try {
@@ -109,7 +220,8 @@ function createSession({ flags, resumeId, cwd }) {
 
   const home = os.homedir();
   const dir = cwd && fs.existsSync(cwd) ? cwd : home;
-  const p = pty.spawn(process.env.SHELL || '/bin/zsh', ['-l'], {
+  const shell = terminalShell();
+  const p = pty.spawn(shell.file, shell.args, {
     name: 'xterm-256color',
     cols: 100,
     rows: 30,
@@ -117,7 +229,7 @@ function createSession({ flags, resumeId, cwd }) {
     env: cleanEnv({ CLAUDETERM_STATUS_FILE: statusFile }),
   });
 
-  const session = { pty: p, statusFile };
+  const session = { pty: p, statusFile, agent };
   // Coalesce pty output into one IPC message per ~frame instead of one per
   // chunk; heavy redraws from Claude Code otherwise flood the renderer.
   let buffer = '';
@@ -137,14 +249,18 @@ function createSession({ flags, resumeId, cwd }) {
       send('session-exit', { id });
     }
   });
-  session.statusInterval = watchStatusFile(id, statusFile);
   sessions.set(id, session);
+  session.statusInterval =
+    agent === 'claude'
+      ? watchStatusFile(id, statusFile)
+      : watchAgentLog(id, agent, { cwd: dir, resumeId, since: Date.now() });
 
-  const parts = ['claude', '--settings', `'${settingsFile}'`];
-  if (resumeId) parts.push('--resume', resumeId);
-  if (flags) parts.push(flags);
+  const command =
+    agent === 'claude'
+      ? buildClaudeLaunchCommand({ settingsFile, resumeId, flags })
+      : buildAgentLaunchCommand({ agent, resumeId, flags });
   setTimeout(() => {
-    if (sessions.has(id)) p.write(parts.join(' ') + '; exit\r');
+    if (sessions.has(id)) p.write(command + '\r');
   }, 400);
 
   return { id, cwd: dir, home };
@@ -167,10 +283,11 @@ function closeSession(id) {
     fs.unlinkSync(s.statusFile);
   } catch {}
   return new Promise((resolve) => {
-    // If the shell ignores SIGHUP, force it, then give up after another second.
+    // Windows pseudoconsole does not accept POSIX signal names.
     let timer = setTimeout(() => {
       try {
-        s.pty.kill('SIGKILL');
+        if (process.platform === 'win32') s.pty.kill();
+        else s.pty.kill('SIGKILL');
       } catch {}
       timer = setTimeout(resolve, 1000);
     }, 1500);
@@ -329,7 +446,7 @@ function listHistory(limit = 40) {
     }
     const { cwd, title } = parseSessionHead(head);
     if (!title) continue; // nothing was ever asked in this session
-    out.push({ id: f.id, cwd, title: transcriptTitle(f.full, head) || title, mtime: f.mtime });
+    out.push({ id: f.id, cwd, title: transcriptTitle(f.full, head) || title, mtime: f.mtime, agent: 'claude' });
   }
   return out;
 }
@@ -360,8 +477,49 @@ function createWindow() {
   });
 }
 
+function installAppMenu() {
+  const quit = { role: 'quit', accelerator: process.platform === 'darwin' ? 'Command+Q' : 'Ctrl+Q' };
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { role: 'fileMenu', submenu: [quit] },
+    { role: 'editMenu' },
+  ]));
+}
+
 ipcMain.handle('session-create', (_e, opts) => createSession(opts));
-ipcMain.handle('history-list', () => ({ home: os.homedir(), items: listHistory() }));
+// Which agent CLIs the user's login shell can find, checked once: the app's own
+// PATH lacks what shell profiles add (Homebrew, npm globals).
+let installedAgents = null;
+function agentsInstalled() {
+  if (installedAgents) return installedAgents;
+  const names = ['claude', 'codex', 'gemini', 'copilot', 'agy'];
+  if (process.platform === 'win32') return (installedAgents = [...names.slice(0, -1), 'antigravity']);
+  const shell = terminalShell();
+  const r = spawnSync(shell.file, [...shell.args, '-c', names.map((n) => `command -v ${n} >/dev/null && echo ${n}`).join('; ')], {
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+  const found = (r.stdout || '')
+    .split('\n')
+    .filter((n) => names.includes(n))
+    .map((n) => (n === 'agy' ? 'antigravity' : n));
+  // If the check itself failed, offer everything rather than nothing.
+  installedAgents = found.length ? found : [...names.slice(0, -1), 'antigravity'];
+  return installedAgents;
+}
+
+ipcMain.handle('agents-installed', () => agentsInstalled());
+ipcMain.handle('history-list', () => {
+  const items = [
+    ...listHistory(),
+    ...codex.listCodexHistory(),
+    ...gemini.listGeminiHistory(),
+    ...copilot.listCopilotHistory(),
+    ...antigravity.listAntigravityHistory(),
+  ]
+    .sort((a, b) => b.mtime - a.mtime)
+    .slice(0, 40);
+  return { home: os.homedir(), items };
+});
 // Login items register the running executable, so under `npm start` this would
 // start a bare Electron at login. Only the built app offers it.
 ipcMain.handle('login-item-get', () => ({
@@ -373,11 +531,10 @@ ipcMain.handle('login-item-set', (_e, enabled) => {
   app.setLoginItemSettings({ openAtLogin: !!enabled });
   return app.getLoginItemSettings().openAtLogin;
 });
-// ~/Developer when there is one, else home. See chosenFolder in renderer.js.
+// ~/Developer when there is one; Windows then tries Documents. See renderer.js.
 ipcMain.handle('folder-default', () => {
   const home = os.homedir();
-  const dev = path.join(home, 'Developer');
-  return { home, folder: fs.existsSync(dev) ? dev : home };
+  return { home, folder: defaultWorkspace(home, fs.existsSync) };
 });
 ipcMain.handle('folder-pick', async (_e, current) => {
   const res = await dialog.showOpenDialog(win, {
@@ -406,6 +563,7 @@ app.whenReady().then(() => {
   if (!app.isPackaged && process.platform === 'darwin') {
     app.dock.setIcon(path.join(__dirname, 'assets', 'icon.png'));
   }
+  installAppMenu();
   createWindow();
 });
 

@@ -752,6 +752,10 @@
       cursor: pointer;
       white-space: nowrap;
     }
+    .segBtn:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
     .segBtn:first-child {
       border-left: none;
     }
@@ -916,6 +920,8 @@
     <div class="box">
       <h2 id="launchTitle">How should Claude Code start?</h2>
       <p id="launchSubtitle"></p>
+      <div class="pickLabel" id="agentLabel">Agent</div>
+      <div id="agentSeg" class="seg"></div>
       <div class="pickLabel" id="modelLabel">Model</div>
       <div id="modelList" class="optList"></div>
       <div class="pickLabel" id="effortLabel">Effort</div>

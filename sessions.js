@@ -63,6 +63,7 @@ function parseCtime(value) {
 }
 
 function processStartTimes(pids) {
+  if (process.platform === 'win32') return windowsProcessStartTimes(pids);
   return new Promise((resolve) => {
     execFile('ps', ['-o', 'pid=,lstart=', '-p', pids.join(',')], { timeout: 5000 }, (err, stdout) => {
       if (err && !stdout) return resolve(null);
@@ -71,6 +72,25 @@ function processStartTimes(pids) {
         const [pid, ...rest] = line.trim().split(/\s+/);
         const t = parseCtime(rest.join(' '));
         if (pid && t) times.set(Number(pid), t.local);
+      }
+      resolve(times.size ? times : null);
+    });
+  });
+}
+
+function windowsProcessStartTimes(pids) {
+  const ids = pids.map(Number).filter(Number.isInteger);
+  if (!ids.length) return Promise.resolve(null);
+  const command = `Get-Process -Id ${ids.join(',')} | Select-Object Id,StartTime | ConvertTo-Json -Compress`;
+  return new Promise((resolve) => {
+    execFile('powershell.exe', ['-NoProfile', '-Command', command], { timeout: 5000 }, (err, stdout) => {
+      if (err && !stdout) return resolve(null);
+      let rows;
+      try { rows = JSON.parse(String(stdout)); } catch { return resolve(null); }
+      const times = new Map();
+      for (const row of Array.isArray(rows) ? rows : [rows]) {
+        const time = Date.parse(row.StartTime);
+        if (Number.isInteger(row.Id) && Number.isFinite(time)) times.set(row.Id, time);
       }
       resolve(times.size ? times : null);
     });

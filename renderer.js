@@ -8,8 +8,19 @@ let pendingResume = null; // { id, cwd, title } when the modal is for resuming
 
 // id -> { term, fit, pane, project, sessionId, contextTokens, contextPct, model }
 const sessions = new Map();
-// Plan limits are account-wide, so any session's feed updates them for all.
-const limits = { fiveHour: null, weekly: null };
+// Plan limits are account-wide, so any session's feed updates them for all
+// sessions of that agent. Claude and Codex plans are separate.
+// Only Claude Code and Codex log their limits; the others' stay empty.
+const AGENTS = ['claude', 'codex', 'gemini', 'copilot', 'antigravity'];
+const AGENT_NAMES = {
+  claude: 'Claude Code',
+  codex: 'Codex',
+  gemini: 'Gemini CLI',
+  copilot: 'Copilot CLI',
+  antigravity: 'Antigravity',
+};
+const AGENT_COMMANDS = { antigravity: 'agy' };
+const limits = Object.fromEntries(AGENTS.map((a) => [a, { fiveHour: null, weekly: null }]));
 let editing = false; // sidebar re-renders are paused while a title is being edited
 // Every Claude Code session running on this machine, by session id, from
 // ~/.claude/sessions. Ours get their status from it; the rest are listed apart.
@@ -207,6 +218,13 @@ window.claudeTerm.onSessionExit(({ id }) => removeSession(id));
 
 window.claudeTerm.onStatusUpdate((msg) => {
   const s = sessions.get(msg.id);
+  const agent = msg.agent || 'claude';
+  if (s && msg.status) {
+    // Other agents report busy/idle in their own feed, not in ~/.claude/sessions.
+    if (msg.status === 'busy') attention.delete(s.sessionId);
+    else if (s.agentStatus === 'busy' && msg.id !== activeId) attention.add(msg.sessionId || s.sessionId);
+    s.agentStatus = msg.status;
+  }
   if (s) {
     if (msg.sessionId && msg.sessionId !== s.sessionId) {
       s.sessionId = msg.sessionId;
@@ -224,20 +242,32 @@ window.claudeTerm.onStatusUpdate((msg) => {
     s.contextTokens = msg.contextTokens;
     s.contextPct = msg.contextPct;
   }
-  if (msg.fiveHour) {
-    limits.fiveHour = {
-      percent: Math.round(msg.fiveHour.used_percentage),
-      resetsAt: toDate(msg.fiveHour.resets_at),
+  for (const key of ['fiveHour', 'weekly']) {
+    if (!msg[key]) continue;
+    limits[agent][key] = {
+      percent: Math.round(msg[key].used_percentage),
+      resetsAt: toDate(msg[key].resets_at),
     };
-  }
-  if (msg.weekly) {
-    limits.weekly = {
-      percent: Math.round(msg.weekly.used_percentage),
-      resetsAt: toDate(msg.weekly.resets_at),
-    };
+    alertLimit(agent, key, limits[agent][key]);
   }
   render();
 });
+
+// One notification per limit window once it passes 90%.
+const LIMIT_ALERT_PCT = 90;
+const alerted = new Set();
+
+function alertLimit(agent, key, entry) {
+  if (entry.percent < LIMIT_ALERT_PCT) return;
+  const tag = `${agent}:${key}:${entry.resetsAt ? entry.resetsAt.getTime() : ''}`;
+  if (alerted.has(tag)) return;
+  alerted.add(tag);
+  try {
+    new Notification(t(currentLang, 'limitAlertTitle'), {
+      body: `${AGENT_NAMES[agent]} · ${t(currentLang, key)}: ${entry.percent}% ${t(currentLang, 'used')}`,
+    });
+  } catch {}
+}
 
 // --- Launch modal ----------------------------------------------------------
 
@@ -251,6 +281,9 @@ const MODELS = [
   { value: 'claude-fable-5-1', name: 'Fable 5.1', desc: 'modelDescFable' },
 ];
 const EFFORTS = ['', 'low', 'medium', 'high', 'xhigh', 'max'];
+// Codex takes its model from ~/.codex/config.toml; only the effort is offered.
+// Gemini CLI and Copilot CLI start with their own defaults.
+const CODEX_EFFORTS = ['', 'low', 'medium', 'high', 'xhigh'];
 // How many of five dots each effort level fills; auto shows them all hollow.
 const EFFORT_LEVEL = { '': 0, low: 1, medium: 2, high: 3, xhigh: 4, max: 5 };
 
@@ -278,6 +311,13 @@ function loadChoice(key, valid, fallback) {
 // Sonnet by default: it uses up plan limits about half as fast as Opus.
 let chosenModel = loadChoice('claudeterm-model', MODELS.map((m) => m.value), 'claude-sonnet-5');
 let chosenEffort = loadChoice('claudeterm-effort', EFFORTS, '');
+let chosenAgent = loadChoice('claudeterm-agent', AGENTS, 'claude');
+let installed = null; // agent CLIs found on this machine, once known
+
+// The agent being launched: fixed by the session when resuming one.
+function launchAgent() {
+  return pendingResume?.agent || chosenAgent;
+}
 // Where new sessions start. Not the home folder by default: Claude Code indexes
 // its working folder, and in ~ that reaches Desktop, Documents and Downloads,
 // each of which macOS asks about separately.
@@ -287,6 +327,38 @@ try {
 } catch {}
 
 function fillLaunchPickers() {
+  const agent = launchAgent();
+  const agents = $('agentSeg');
+  agents.replaceChildren();
+  agents.style.gridTemplateColumns = `repeat(${AGENTS.length}, 1fr)`;
+  for (const a of AGENTS) {
+    const b = el('button', 'segBtn' + (a === agent ? ' selected' : ''), AGENT_NAMES[a]);
+    b.type = 'button';
+    if (installed && !installed.includes(a)) {
+      b.disabled = true;
+      b.title = t(currentLang, 'notInstalled');
+    }
+    b.addEventListener('click', () => {
+      chosenAgent = a;
+      fillLaunchPickers();
+    });
+    agents.appendChild(b);
+  }
+  const resuming = !!pendingResume;
+  $('agentLabel').style.display = resuming ? 'none' : '';
+  agents.style.display = resuming ? 'none' : '';
+  const codex = agent === 'codex';
+  const claude = agent === 'claude';
+  $('modelLabel').style.display = claude ? '' : 'none';
+  $('modelList').style.display = claude ? '' : 'none';
+  const hasEffort = claude || codex;
+  for (const e of ['effortLabel', 'effortSeg', 'effortHint']) $(e).style.display = hasEffort ? '' : 'none';
+  $('launchTitle').textContent = resuming
+    ? t(currentLang, 'resumeTitle')
+    : claude
+      ? t(currentLang, 'launchTitle')
+      : t(currentLang, 'launchTitleAgent').replace('{agent}', AGENT_NAMES[agent]);
+
   const list = $('modelList');
   list.replaceChildren();
   for (const m of MODELS) {
@@ -304,10 +376,13 @@ function fillLaunchPickers() {
     list.appendChild(row);
   }
 
+  const efforts = codex ? CODEX_EFFORTS : EFFORTS;
+  const effort = efforts.includes(chosenEffort) ? chosenEffort : '';
   const seg = $('effortSeg');
   seg.replaceChildren();
-  for (const e of EFFORTS) {
-    const b = el('button', 'segBtn' + (e === chosenEffort ? ' selected' : ''));
+  seg.style.gridTemplateColumns = `repeat(${efforts.length}, 1fr)`;
+  for (const e of efforts) {
+    const b = el('button', 'segBtn' + (e === effort ? ' selected' : ''));
     b.type = 'button';
     b.appendChild(effortMeter(e));
     b.appendChild(el('span', null, t(currentLang, e ? 'effort_' + e : 'effortAuto')));
@@ -317,7 +392,9 @@ function fillLaunchPickers() {
     });
     seg.appendChild(b);
   }
-  $('effortHint').textContent = t(currentLang, 'effortDesc_' + (chosenEffort || 'auto'));
+  $('effortHint').textContent = codex && !effort
+    ? t(currentLang, 'effortDesc_autoCodex')
+    : t(currentLang, 'effortDesc_' + (effort || 'auto'));
   renderLaunchCommands();
 }
 
@@ -325,7 +402,22 @@ function shortDir(dir) {
   return homeDir && dir && dir.startsWith(homeDir) ? '~' + dir.slice(homeDir.length) : dir || '~';
 }
 
-function launchFlags(extra) {
+const SKIP_FLAGS = {
+  claude: '--dangerously-skip-permissions',
+  codex: '--dangerously-bypass-approvals-and-sandbox',
+  gemini: '--yolo',
+  copilot: '--allow-all-tools',
+  antigravity: '--dangerously-skip-permissions',
+};
+
+function launchFlags(skip) {
+  const agent = launchAgent();
+  const extra = skip ? SKIP_FLAGS[agent] : '';
+  if (agent === 'codex') {
+    const effort = CODEX_EFFORTS.includes(chosenEffort) ? chosenEffort : '';
+    return [effort ? `-c model_reasoning_effort=${effort}` : '', extra].filter(Boolean).join(' ');
+  }
+  if (agent !== 'claude') return extra;
   return [chosenModel ? `--model ${chosenModel}` : '', chosenEffort ? `--effort ${chosenEffort}` : '', extra]
     .filter(Boolean)
     .join(' ');
@@ -333,9 +425,12 @@ function launchFlags(extra) {
 
 // The buttons show the exact command each one runs.
 function renderLaunchCommands() {
-  const resume = pendingResume ? ` --resume ${pendingResume.id.slice(0, 8)}…` : '';
-  $('cmdNormal').textContent = ['claude' + resume, launchFlags('')].filter(Boolean).join(' ');
-  $('cmdSkip').textContent = ['claude' + resume, launchFlags('--dangerously-skip-permissions')].join(' ');
+  const agent = launchAgent();
+  const id = pendingResume ? `${pendingResume.id.slice(0, 8)}…` : '';
+  const resumeArg = { codex: 'resume', antigravity: '--conversation' }[agent] || '--resume';
+  const base = (AGENT_COMMANDS[agent] || agent) + (id ? ` ${resumeArg} ${id}` : '');
+  $('cmdNormal').textContent = [base, launchFlags(false)].filter(Boolean).join(' ');
+  $('cmdSkip').textContent = [base, launchFlags(true)].join(' ');
   $('folderPath').textContent = shortDir(pendingResume ? pendingResume.cwd : chosenFolder);
   $('btnFolder').style.display = pendingResume ? 'none' : '';
 }
@@ -352,10 +447,11 @@ $('btnFolder').addEventListener('click', async () => {
 
 async function openLaunchModal(resume) {
   pendingResume = resume || null;
+  if (!installed) installed = await window.claudeTerm.installedAgents();
+  if (!installed.includes(chosenAgent)) chosenAgent = 'claude';
   const def = await window.claudeTerm.defaultFolder();
   homeDir = def.home;
   if (!chosenFolder) chosenFolder = def.folder;
-  $('launchTitle').textContent = t(currentLang, resume ? 'resumeTitle' : 'launchTitle');
   $('launchSubtitle').textContent = resume ? resume.title : '';
   $('launchSubtitle').style.display = resume ? 'block' : 'none';
   fillLaunchPickers();
@@ -367,20 +463,25 @@ function closeLaunchModal() {
   pendingResume = null;
 }
 
-async function launch(extraFlags) {
+async function launch(skip) {
   try {
     localStorage.setItem('claudeterm-model', chosenModel);
     localStorage.setItem('claudeterm-effort', chosenEffort);
+    localStorage.setItem('claudeterm-agent', chosenAgent);
   } catch {}
   const resume = pendingResume;
+  const agent = launchAgent();
+  const flags = launchFlags(skip);
   closeLaunchModal();
-  await startSession(launchFlags(extraFlags), resume, resume ? resume.cwd : chosenFolder);
+  await startSession(flags, resume, resume ? resume.cwd : chosenFolder, true, agent);
 }
 
-// Opens a terminal running Claude Code. `resume` is { id, title } to continue a
-// past session; `flags` are kept so a restored session starts the same way.
-async function startSession(flags, resume, folder, focus = true) {
+// Opens a terminal running Claude Code or Codex. `resume` is { id, title } to
+// continue a past session; `flags` are kept so a restored session starts the
+// same way.
+async function startSession(flags, resume, folder, focus = true, agent = 'claude') {
   const { id, cwd, home } = await window.claudeTerm.createSession({
+    agent,
     flags,
     resumeId: resume?.id,
     cwd: folder,
@@ -390,6 +491,7 @@ async function startSession(flags, resume, folder, focus = true) {
     ...createTermPane(id),
     project: cwd,
     startCwd: cwd,
+    agent,
     flags,
     sessionId: resume?.id || null,
     aiTitle: resume?.title || null,
@@ -413,7 +515,7 @@ async function startSession(flags, resume, folder, focus = true) {
 function saveOpenSessions() {
   const list = [...sessions.values()]
     .filter((s) => s.sessionId)
-    .map((s) => ({ id: s.sessionId, cwd: s.startCwd, flags: s.flags || '', title: s.aiTitle || null }));
+    .map((s) => ({ id: s.sessionId, agent: s.agent, cwd: s.startCwd, flags: s.flags || '', title: s.aiTitle || null }));
   try {
     localStorage.setItem('claudeterm-open', JSON.stringify(list));
   } catch {}
@@ -434,14 +536,15 @@ async function restoreOpenSessions() {
   }
   list = list.filter((r) => !live.has(r.id));
   for (const [i, r] of list.entries()) {
-    await startSession(r.flags, { id: r.id, title: r.title }, r.cwd, i === 0);
+    const agent = r.agent || 'claude';
+    await startSession(r.flags, { id: r.id, agent, title: r.title }, r.cwd, i === 0, agent);
   }
   return list.length;
 }
 
 $('btnNew').addEventListener('click', () => openLaunchModal(null));
-$('btnNormal').addEventListener('click', () => launch(''));
-$('btnSkipPerm').addEventListener('click', () => launch('--dangerously-skip-permissions'));
+$('btnNormal').addEventListener('click', () => launch(false));
+$('btnSkipPerm').addEventListener('click', () => launch(true));
 $('btnCancel').addEventListener('click', closeLaunchModal);
 
 // --- Sidebar ---------------------------------------------------------------
@@ -609,11 +712,12 @@ function renderSidebar() {
     const item = el('div', 'item' + (id === activeId ? ' active' : ''));
     const title = activeTitle(s);
     item.title = title;
-    const info = s.sessionId && live.get(s.sessionId);
-    const status = info ? info.status : 'idle';
+    const other = s.agent !== 'claude';
+    const info = !other && s.sessionId && live.get(s.sessionId);
+    const status = other ? s.agentStatus || 'idle' : info ? info.status : 'idle';
     // No need to blink the session you are looking at.
     if (id !== activeId || !document.hasFocus()) markAttention(item, s.sessionId, status);
-    const name = nameRow(item, title, status, s.model || info?.model);
+    const name = nameRow(item, title, status, s.model || info?.model || (other ? AGENT_NAMES[s.agent] : null));
     const meta = [projectName(s.project)];
     if (s.contextTokens != null) meta.push(`${s.contextTokens.toLocaleString(locale())} tok`);
     metaRow(item, meta.join(' · '), status);
@@ -626,7 +730,7 @@ function renderSidebar() {
         window.claudeTerm.closeSession(id);
         removeSession(id);
       },
-      s.sessionId
+      other ? null : s.sessionId // the detail panel reads Claude Code transcripts
     );
     item.addEventListener('click', () => setActive(id));
     makeDraggable(item, id);
@@ -664,9 +768,10 @@ function renderSidebar() {
     const item = el('div', 'item');
     const title = titles[h.id] || h.title;
     item.title = title;
-    const name = nameRow(item, title, null, null);
+    const other = h.agent && h.agent !== 'claude';
+    const name = nameRow(item, title, null, other ? AGENT_NAMES[h.agent] : null);
     metaRow(item, `${projectName(h.cwd)} · ${relativeTime(h.mtime)}`);
-    itemActions(item, name, title, (v) => saveTitle(h.id, v), null, h.id);
+    itemActions(item, name, title, (v) => saveTitle(h.id, v), null, other ? null : h.id);
     item.addEventListener('click', () => openLaunchModal({ ...h, title }));
     list.appendChild(item);
   }
@@ -683,7 +788,8 @@ async function pollLive() {
       else if (prev === 'busy' && l.id !== focusedId) attention.add(l.id);
       lastStatus.set(l.id, l.status);
     }
-    for (const id of attention) if (!live.has(id)) attention.delete(id);
+    const otherIds = new Set([...sessions.values()].filter((x) => x.agent !== 'claude').map((x) => x.sessionId));
+    for (const id of attention) if (!live.has(id) && !otherIds.has(id)) attention.delete(id);
     renderSidebar();
   } catch {}
 }
@@ -700,8 +806,8 @@ for (const header of document.querySelectorAll('.sectionTitle')) {
 
 // --- Status bar ------------------------------------------------------------
 
-function renderLimit(id, key) {
-  const entry = limits[key];
+function renderLimit(id, key, agent) {
+  const entry = limits[agent][key];
   const e = $(id);
   if (!entry) {
     e.textContent = '—';
@@ -730,8 +836,10 @@ function render() {
   } else {
     $('tokenCount').textContent = '—';
   }
-  renderLimit('fiveHourLimit', 'fiveHour');
-  renderLimit('weeklyLimit', 'weekly');
+  // Limits shown are those of the agent in the open session.
+  const agent = s?.agent || 'claude';
+  renderLimit('fiveHourLimit', 'fiveHour', agent);
+  renderLimit('weeklyLimit', 'weekly', agent);
   document.title = s ? `ClaudeTerm — ${projectName(s.project)}` : 'ClaudeTerm';
   renderSidebar();
 }
@@ -949,7 +1057,7 @@ function renderDetail(d) {
     const open = el('button', null, t(currentLang, 'resumeTitle'));
     open.addEventListener('click', () => {
       closeDetail();
-      openLaunchModal({ id: d.id, cwd: d.cwd, title: titles[d.id] || d.title || d.id.slice(0, 8) });
+      openLaunchModal({ id: d.id, agent: 'claude', cwd: d.cwd, title: titles[d.id] || d.title || d.id.slice(0, 8) });
     });
     resume.appendChild(open);
   }
@@ -1017,9 +1125,9 @@ function applyLang() {
   $('loginToggle').title = t(currentLang, 'openAtLoginHint');
   fillThemePicker();
   $('placeholder').textContent = t(currentLang, 'placeholder');
-  $('launchTitle').textContent = t(currentLang, pendingResume ? 'resumeTitle' : 'launchTitle');
   $('launchNormalLabel').textContent = t(currentLang, 'launchNormal');
   $('launchSkipLabel').textContent = t(currentLang, 'launchSkipPerm');
+  $('agentLabel').textContent = t(currentLang, 'agent');
   $('modelLabel').textContent = t(currentLang, 'model');
   $('effortLabel').textContent = t(currentLang, 'effort');
   $('folderLabel').textContent = t(currentLang, 'folder');

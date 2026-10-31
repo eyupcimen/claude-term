@@ -6,7 +6,9 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --mac"
+    "dist": "electron-builder --mac",
+    "dist:win": "electron-builder --win nsis portable",
+    "test": "node --test test/*.test.js"
   },
   "keywords": [
     "claude",
@@ -38,6 +40,13 @@
       "preload.js",
       "renderer.js",
       "i18n.js",
+      "platform.js",
+      "status-writer.js",
+      "codex.js",
+      "gemini.js",
+      "copilot.js",
+      "agent-files.js",
+      "antigravity.js",
       "index.html",
       "assets/icon.png",
       "node_modules/**/*"
@@ -58,6 +67,9 @@
           ]
         }
       ]
+    },
+    "win": {
+      "target": ["nsis", "portable"]
     },
     "directories": {
       "buildResources": "assets"
