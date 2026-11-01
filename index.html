@@ -637,7 +637,8 @@
     }
 
     /* --- Launch modal --- */
-    #launchModal {
+    #launchModal,
+    #settingsModal {
       position: fixed;
       inset: 0;
       background: var(--scrim);
@@ -646,10 +647,12 @@
       justify-content: center;
       z-index: 10;
     }
-    #launchModal.open {
+    #launchModal.open,
+    #settingsModal.open {
       display: flex;
     }
-    #launchModal .box {
+    #launchModal .box,
+    #settingsModal .box {
       background: var(--bg-2);
       border: 1px solid var(--line);
       border-top: 2px solid var(--accent);
@@ -661,7 +664,8 @@
       box-sizing: border-box;
       color: var(--text);
     }
-    #launchModal h2 {
+    #launchModal h2,
+    #settingsModal h2 {
       margin: 0 0 6px;
       font-size: 15px;
       font-weight: 600;
@@ -852,7 +856,8 @@
     #btnNormal {
       margin-top: 16px;
     }
-    #btnCancel {
+    #btnCancel,
+    #btnSettingsDone {
       margin-top: 12px;
       background: none;
       border: none;
@@ -860,6 +865,102 @@
       font-size: 12px;
       cursor: pointer;
       padding: 0;
+    }
+    #sidebarResize {
+      width: 5px;
+      margin-left: -3px;
+      flex-shrink: 0;
+      cursor: col-resize;
+      z-index: 2;
+    }
+    #sidebarResize:hover,
+    #sidebarResize.dragging {
+      background: var(--accent);
+      opacity: 0.5;
+    }
+    #btnSettings {
+      -webkit-app-region: no-drag;
+      background: transparent;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--text-2);
+      font-size: 12px;
+      padding: 2px 7px;
+      cursor: pointer;
+    }
+    #btnSettings:hover {
+      border-color: var(--accent);
+    }
+    .sizeRow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 10px;
+      font-size: 13px;
+    }
+    .stepper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .stepper button {
+      width: 26px;
+      height: 26px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .stepper button:hover {
+      border-color: var(--accent);
+    }
+    .stepper output {
+      min-width: 40px;
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+    #btnSettingsReset {
+      margin-top: 16px;
+      background: none;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--text-2);
+      font-size: 12px;
+      padding: 4px 10px;
+      cursor: pointer;
+    }
+    #ctxMenu {
+      position: fixed;
+      z-index: 20;
+      min-width: 200px;
+      padding: 4px;
+      background: var(--bg-2);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+    }
+    #ctxMenu button {
+      display: block;
+      width: 100%;
+      padding: 6px 10px;
+      border: none;
+      border-radius: 5px;
+      background: none;
+      color: var(--text);
+      font-size: 12.5px;
+      text-align: left;
+      cursor: pointer;
+    }
+    #ctxMenu button:hover {
+      background: var(--bg-3);
+    }
+    #ctxMenu hr {
+      margin: 4px 6px;
+      border: none;
+      border-top: 1px solid var(--line);
     }
   </style>
 </head>
@@ -884,10 +985,12 @@
         <div id="historyList" hidden></div>
       </div>
     </aside>
+    <div id="sidebarResize"></div>
 
     <section id="main">
       <div id="statusbar">
         <div class="pickers">
+          <button id="btnSettings" type="button" title="Settings">⚙</button>
           <select id="langPicker" title="Language">
             <option value="en">🌐 EN</option>
             <option value="de">🌐 DE</option>
@@ -943,6 +1046,24 @@
       <button id="btnCancel">Cancel</button>
     </div>
   </div>
+
+  <div id="settingsModal">
+    <div class="box">
+      <h2 id="settingsTitle">Settings</h2>
+      <div class="sizeRow">
+        <span id="lblTermFont">Terminal text size</span>
+        <span class="stepper"><button type="button" data-size="term" data-step="-1">−</button><output id="termFontValue"></output><button type="button" data-size="term" data-step="1">+</button></span>
+      </div>
+      <div class="sizeRow">
+        <span id="lblSidebarFont">Sidebar text size</span>
+        <span class="stepper"><button type="button" data-size="sidebar" data-step="-1">−</button><output id="sidebarFontValue"></output><button type="button" data-size="sidebar" data-step="1">+</button></span>
+      </div>
+      <button id="btnSettingsReset" type="button">Reset</button>
+      <div><button id="btnSettingsDone" type="button">Done</button></div>
+    </div>
+  </div>
+
+  <div id="ctxMenu" hidden></div>
 
   <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
   <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>

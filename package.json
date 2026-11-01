@@ -47,6 +47,7 @@
       "copilot.js",
       "agent-files.js",
       "antigravity.js",
+      "handoff.js",
       "index.html",
       "assets/icon.png",
       "node_modules/**/*"

@@ -9,6 +9,7 @@ const codex = require('./codex');
 const gemini = require('./gemini');
 const copilot = require('./copilot');
 const antigravity = require('./antigravity');
+const { prepareHandoff, handoffPrompt } = require('./handoff');
 const {
   terminalShell,
   buildStatusLineCommand,
@@ -211,7 +212,7 @@ function watchAgentLog(id, agent, { cwd, resumeId, since }) {
   }, 1000);
 }
 
-function createSession({ agent = 'claude', flags, resumeId, cwd }) {
+function createSession({ agent = 'claude', flags, resumeId, cwd, prompt }) {
   const id = nextId++;
   const statusFile = path.join(app.getPath('userData'), `status-${process.pid}-${id}.json`);
   try {
@@ -257,8 +258,8 @@ function createSession({ agent = 'claude', flags, resumeId, cwd }) {
 
   const command =
     agent === 'claude'
-      ? buildClaudeLaunchCommand({ settingsFile, resumeId, flags })
-      : buildAgentLaunchCommand({ agent, resumeId, flags });
+      ? buildClaudeLaunchCommand({ settingsFile, resumeId, flags, prompt })
+      : buildAgentLaunchCommand({ agent, resumeId, flags, prompt });
   setTimeout(() => {
     if (sessions.has(id)) p.write(command + '\r');
   }, 400);
@@ -508,6 +509,11 @@ function agentsInstalled() {
 }
 
 ipcMain.handle('agents-installed', () => agentsInstalled());
+// The first message for an agent taking over `from` (a past session), or null.
+ipcMain.handle('handoff-prepare', (_e, from) => {
+  const file = prepareHandoff(from, path.join(app.getPath('userData'), 'handoffs'));
+  return file ? handoffPrompt(file, from.agent) : null;
+});
 ipcMain.handle('history-list', () => {
   const items = [
     ...listHistory(),

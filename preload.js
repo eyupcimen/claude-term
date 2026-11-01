@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('claudeTerm', {
   sessionDetail: (id) => ipcRenderer.invoke('session-detail', id),
   defaultFolder: () => ipcRenderer.invoke('folder-default'),
   installedAgents: () => ipcRenderer.invoke('agents-installed'),
+  prepareHandoff: (from) => ipcRenderer.invoke('handoff-prepare', from),
   pickFolder: (current) => ipcRenderer.invoke('folder-pick', current),
   getLoginItem: () => ipcRenderer.invoke('login-item-get'),
   setLoginItem: (enabled) => ipcRenderer.invoke('login-item-set', enabled),

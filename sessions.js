@@ -531,4 +531,4 @@ function buildContext(first, last, model, slices) {
   };
 }
 
-module.exports = { listLive, readDetail, modelLabel };
+module.exports = { listLive, readDetail, modelLabel, findTranscript };

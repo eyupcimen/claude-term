@@ -49,6 +49,33 @@ function saveTitle(sessionId, title) {
 
 const $ = (id) => document.getElementById(id);
 
+// --- Settings: text sizes and sidebar width --------------------------------
+
+const DEFAULT_SETTINGS = { termFont: 14, sidebarFont: 12.5, sidebarWidth: 280 };
+const SIZE_LIMITS = { term: [10, 28, 1], sidebar: [10, 18, 0.5] };
+let settings = { ...DEFAULT_SETTINGS };
+try {
+  Object.assign(settings, JSON.parse(localStorage.getItem('claudeterm-settings') || '{}'));
+} catch {}
+
+function saveSettings() {
+  try {
+    localStorage.setItem('claudeterm-settings', JSON.stringify(settings));
+  } catch {}
+}
+
+// The sidebar's styles use fixed pixel sizes, so its text is scaled with zoom
+// on its contents rather than the sidebar itself, which keeps its width exact.
+function applySettings() {
+  const zoom = settings.sidebarFont / DEFAULT_SETTINGS.sidebarFont;
+  for (const id of ['sidebarTop', 'sessionLists']) $(id).style.zoom = zoom;
+  $('sidebar').style.width = settings.sidebarWidth + 'px';
+  for (const s of sessions.values()) s.term.options.fontSize = settings.termFont;
+  $('termFontValue').textContent = settings.termFont + ' px';
+  $('sidebarFontValue').textContent = settings.sidebarFont + ' px';
+  fitActive();
+}
+
 // --- Theme -----------------------------------------------------------------
 
 const TERM_THEMES = {
@@ -152,7 +179,7 @@ function createTermPane(id) {
   $('terminals').appendChild(pane);
   const term = new Terminal({
     cursorBlink: true,
-    fontSize: 14,
+    fontSize: settings.termFont,
     fontFamily: 'Menlo, monospace',
     theme: TERM_THEMES[effectiveTheme()],
     scrollback: 5000,
@@ -353,7 +380,9 @@ function fillLaunchPickers() {
   $('modelList').style.display = claude ? '' : 'none';
   const hasEffort = claude || codex;
   for (const e of ['effortLabel', 'effortSeg', 'effortHint']) $(e).style.display = hasEffort ? '' : 'none';
-  $('launchTitle').textContent = resuming
+  $('launchTitle').textContent = pendingResume?.handoffFrom
+    ? t(currentLang, 'handoffTitle').replace('{agent}', AGENT_NAMES[agent])
+    : resuming
     ? t(currentLang, 'resumeTitle')
     : claude
       ? t(currentLang, 'launchTitle')
@@ -426,11 +455,13 @@ function launchFlags(skip) {
 // The buttons show the exact command each one runs.
 function renderLaunchCommands() {
   const agent = launchAgent();
-  const id = pendingResume ? `${pendingResume.id.slice(0, 8)}…` : '';
+  const id = pendingResume?.id ? `${pendingResume.id.slice(0, 8)}…` : '';
   const resumeArg = { codex: 'resume', antigravity: '--conversation' }[agent] || '--resume';
-  const base = (AGENT_COMMANDS[agent] || agent) + (id ? ` ${resumeArg} ${id}` : '');
-  $('cmdNormal').textContent = [base, launchFlags(false)].filter(Boolean).join(' ');
-  $('cmdSkip').textContent = [base, launchFlags(true)].join(' ');
+  const fork = pendingResume?.fork ? ' --fork-session' : '';
+  const handoff = pendingResume?.handoffFrom ? `"${t(currentLang, 'handoffCmd')}"` : '';
+  const base = (AGENT_COMMANDS[agent] || agent) + (id ? ` ${resumeArg} ${id}${fork}` : '');
+  $('cmdNormal').textContent = [base, launchFlags(false), handoff].filter(Boolean).join(' ');
+  $('cmdSkip').textContent = [base, launchFlags(true), handoff].filter(Boolean).join(' ');
   $('folderPath').textContent = shortDir(pendingResume ? pendingResume.cwd : chosenFolder);
   $('btnFolder').style.display = pendingResume ? 'none' : '';
 }
@@ -452,7 +483,15 @@ async function openLaunchModal(resume) {
   const def = await window.claudeTerm.defaultFolder();
   homeDir = def.home;
   if (!chosenFolder) chosenFolder = def.folder;
-  $('launchSubtitle').textContent = resume ? resume.title : '';
+  // Claude Code can't run one session in two processes, so a session still
+  // open in another terminal continues here as a copy.
+  $('launchSubtitle').textContent = resume
+    ? resume.handoffFrom
+      ? `${resume.title} — ${t(currentLang, 'handoffNote').replace('{agent}', AGENT_NAMES[resume.handoffFrom.agent])}`
+      : resume.fork
+      ? `${resume.title} — ${t(currentLang, 'forkNote')}`
+      : resume.title
+    : '';
   $('launchSubtitle').style.display = resume ? 'block' : 'none';
   fillLaunchPickers();
   $('launchModal').classList.add('open');
@@ -472,6 +511,17 @@ async function launch(skip) {
   const resume = pendingResume;
   const agent = launchAgent();
   const flags = launchFlags(skip);
+  if (resume?.handoffFrom) {
+    // A new session of `agent`, told to read the earlier conversation first.
+    const prompt = await window.claudeTerm.prepareHandoff(resume.handoffFrom);
+    if (!prompt) {
+      $('launchSubtitle').textContent = t(currentLang, 'handoffFailed');
+      return;
+    }
+    closeLaunchModal();
+    await startSession(flags, { title: resume.title }, resume.cwd, true, agent, prompt);
+    return;
+  }
   closeLaunchModal();
   await startSession(flags, resume, resume ? resume.cwd : chosenFolder, true, agent);
 }
@@ -479,10 +529,12 @@ async function launch(skip) {
 // Opens a terminal running Claude Code or Codex. `resume` is { id, title } to
 // continue a past session; `flags` are kept so a restored session starts the
 // same way.
-async function startSession(flags, resume, folder, focus = true, agent = 'claude') {
+async function startSession(flags, resume, folder, focus = true, agent = 'claude', prompt = null) {
   const { id, cwd, home } = await window.claudeTerm.createSession({
     agent,
-    flags,
+    prompt,
+    // Not kept in `flags`: a restored copy resumes its own id, without forking again.
+    flags: [resume?.fork ? '--fork-session' : '', flags].filter(Boolean).join(' '),
     resumeId: resume?.id,
     cwd: folder,
   });
@@ -493,7 +545,7 @@ async function startSession(flags, resume, folder, focus = true, agent = 'claude
     startCwd: cwd,
     agent,
     flags,
-    sessionId: resume?.id || null,
+    sessionId: resume?.fork ? null : resume?.id || null,
     aiTitle: resume?.title || null,
     contextTokens: null,
     contextPct: null,
@@ -547,6 +599,110 @@ $('btnNormal').addEventListener('click', () => launch(false));
 $('btnSkipPerm').addEventListener('click', () => launch(true));
 $('btnCancel').addEventListener('click', closeLaunchModal);
 
+// --- Settings dialog -------------------------------------------------------
+
+$('btnSettings').addEventListener('click', () => $('settingsModal').classList.add('open'));
+$('btnSettingsDone').addEventListener('click', () => $('settingsModal').classList.remove('open'));
+$('btnSettingsReset').addEventListener('click', () => {
+  settings = { ...DEFAULT_SETTINGS };
+  saveSettings();
+  applySettings();
+});
+for (const b of document.querySelectorAll('.stepper button')) {
+  b.addEventListener('click', () => {
+    const [min, max, step] = SIZE_LIMITS[b.dataset.size];
+    const key = b.dataset.size === 'term' ? 'termFont' : 'sidebarFont';
+    settings[key] = Math.min(max, Math.max(min, settings[key] + step * Number(b.dataset.step)));
+    saveSettings();
+    applySettings();
+  });
+}
+
+// --- Sidebar width -----------------------------------------------------------
+
+$('sidebarResize').addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  const handle = e.currentTarget;
+  const startX = e.clientX;
+  const startWidth = $('sidebar').offsetWidth;
+  handle.classList.add('dragging');
+  const move = (ev) => {
+    settings.sidebarWidth = Math.round(Math.min(640, Math.max(180, startWidth + ev.clientX - startX)));
+    applySettings();
+  };
+  const up = () => {
+    handle.classList.remove('dragging');
+    window.removeEventListener('mousemove', move);
+    window.removeEventListener('mouseup', up);
+    saveSettings();
+  };
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', up);
+});
+
+// --- Right-click menu --------------------------------------------------------
+
+// Agents whose transcripts can be read, so another agent can take over.
+const HANDOFF_SOURCES = ['claude', 'codex', 'gemini', 'copilot'];
+// Agents that can be started with a first message.
+const HANDOFF_TARGETS = ['claude', 'codex', 'gemini', 'copilot'];
+
+function closeMenu() {
+  $('ctxMenu').hidden = true;
+}
+
+function menuItem(label, onClick) {
+  const b = el('button', null, label);
+  b.type = 'button';
+  b.addEventListener('click', () => {
+    closeMenu();
+    onClick();
+  });
+  return b;
+}
+
+// `entry` is a past or running session: { id, agent, cwd, title, running }.
+async function showSessionMenu(e, entry, extra) {
+  e.preventDefault();
+  if (!installed) installed = await window.claudeTerm.installedAgents();
+  const menu = $('ctxMenu');
+  menu.replaceChildren();
+  const name = AGENT_NAMES[entry.agent];
+  menu.appendChild(
+    menuItem(t(currentLang, 'menuContinue').replace('{agent}', name), () =>
+      openLaunchModal({ id: entry.id, agent: entry.agent, cwd: entry.cwd, title: entry.title, fork: entry.running })
+    )
+  );
+  if (HANDOFF_SOURCES.includes(entry.agent)) {
+    const targets = HANDOFF_TARGETS.filter((a) => a !== entry.agent && installed.includes(a));
+    if (targets.length) menu.appendChild(el('hr'));
+    for (const a of targets) {
+      menu.appendChild(
+        menuItem(t(currentLang, 'menuContinueWith').replace('{agent}', AGENT_NAMES[a]), () =>
+          openLaunchModal({
+            agent: a,
+            cwd: entry.cwd,
+            title: entry.title,
+            handoffFrom: { agent: entry.agent, id: entry.id, cwd: entry.cwd },
+          })
+        )
+      );
+    }
+  }
+  if (extra.length) menu.appendChild(el('hr'));
+  for (const [label, fn] of extra) menu.appendChild(menuItem(label, fn));
+  menu.hidden = false;
+  // Keep it on screen.
+  const { innerWidth: w, innerHeight: h } = window;
+  menu.style.left = Math.min(e.clientX, w - menu.offsetWidth - 4) + 'px';
+  menu.style.top = Math.min(e.clientY, h - menu.offsetHeight - 4) + 'px';
+}
+
+window.addEventListener('mousedown', (e) => {
+  if (!$('ctxMenu').contains(e.target)) closeMenu();
+});
+window.addEventListener('blur', closeMenu);
+
 // --- Sidebar ---------------------------------------------------------------
 
 async function refreshHistory() {
@@ -593,7 +749,7 @@ function startRename(nameEl, current, onSave) {
   input.addEventListener('dblclick', (e) => e.stopPropagation());
 }
 
-function itemActions(item, nameEl, current, onSave, onClose, sessionId) {
+function itemActions(item, nameEl, current, onSave, onClose, sessionId, dblRename = true) {
   const actions = el('div', 'actions');
   if (sessionId) {
     const info = el('span', 'btn', 'ⓘ');
@@ -612,10 +768,12 @@ function itemActions(item, nameEl, current, onSave, onClose, sessionId) {
       startRename(nameEl, current, onSave);
     });
     actions.appendChild(rename);
-    nameEl.addEventListener('dblclick', (e) => {
-      e.stopPropagation();
-      startRename(nameEl, current, onSave);
-    });
+    if (dblRename) {
+      nameEl.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        startRename(nameEl, current, onSave);
+      });
+    }
   }
   if (onClose) {
     const close = el('span', 'btn', '×');
@@ -751,11 +909,22 @@ function renderSidebar() {
     markAttention(item, l.id, l.status);
     const name = nameRow(item, title, l.status, l.model);
     metaRow(item, projectName(l.cwd), l.status);
-    itemActions(item, name, title, (v) => saveTitle(l.id, v), null, l.id);
+    // Double-click continues it here; ✎ renames it.
+    itemActions(item, name, title, (v) => saveTitle(l.id, v), null, l.id, false);
     item.addEventListener('click', () => {
       attention.delete(l.id);
       openDetail(l.id);
     });
+    item.addEventListener('dblclick', () => {
+      closeDetail();
+      openLaunchModal({ id: l.id, agent: 'claude', cwd: l.cwd, title, fork: true });
+    });
+    item.addEventListener('contextmenu', (e) =>
+      showSessionMenu(e, { id: l.id, agent: 'claude', cwd: l.cwd, title, running: true }, [
+        [t(currentLang, 'menuRename'), () => startRename(name, title, (v) => saveTitle(l.id, v))],
+        [t(currentLang, 'details'), () => openDetail(l.id)],
+      ])
+    );
     ext.appendChild(item);
   }
 
@@ -773,6 +942,9 @@ function renderSidebar() {
     metaRow(item, `${projectName(h.cwd)} · ${relativeTime(h.mtime)}`);
     itemActions(item, name, title, (v) => saveTitle(h.id, v), null, other ? null : h.id);
     item.addEventListener('click', () => openLaunchModal({ ...h, title }));
+    const extra = [[t(currentLang, 'menuRename'), () => startRename(name, title, (v) => saveTitle(h.id, v))]];
+    if (!other) extra.push([t(currentLang, 'details'), () => openDetail(h.id)]);
+    item.addEventListener('contextmenu', (e) => showSessionMenu(e, { ...h, agent: h.agent || 'claude', title }, extra));
     list.appendChild(item);
   }
 }
@@ -1102,7 +1274,10 @@ function closeDetail() {
 
 $('detailClose').addEventListener('click', closeDetail);
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && detailId && !$('launchModal').classList.contains('open')) closeDetail();
+  if (e.key !== 'Escape') return;
+  if (!$('ctxMenu').hidden) return closeMenu();
+  if ($('settingsModal').classList.contains('open')) return $('settingsModal').classList.remove('open');
+  if (detailId && !$('launchModal').classList.contains('open')) closeDetail();
 });
 // A running session keeps writing; re-read (cached by size + mtime) while open.
 setInterval(() => {
@@ -1128,6 +1303,12 @@ function applyLang() {
   $('launchNormalLabel').textContent = t(currentLang, 'launchNormal');
   $('launchSkipLabel').textContent = t(currentLang, 'launchSkipPerm');
   $('agentLabel').textContent = t(currentLang, 'agent');
+  $('btnSettings').title = t(currentLang, 'settings');
+  $('settingsTitle').textContent = t(currentLang, 'settings');
+  $('lblTermFont').textContent = t(currentLang, 'termFontSize');
+  $('lblSidebarFont').textContent = t(currentLang, 'sidebarFontSize');
+  $('btnSettingsReset').textContent = t(currentLang, 'reset');
+  $('btnSettingsDone').textContent = t(currentLang, 'done');
   $('modelLabel').textContent = t(currentLang, 'model');
   $('effortLabel').textContent = t(currentLang, 'effort');
   $('folderLabel').textContent = t(currentLang, 'folder');
@@ -1179,6 +1360,7 @@ $('langPicker').addEventListener('change', (e) => {
 });
 
 applyTheme();
+applySettings();
 applyLang();
 initLoginItem();
 refreshHistory();

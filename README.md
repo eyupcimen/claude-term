@@ -17,14 +17,16 @@ Run Claude Code in four terminals and you lose track of which one is waiting on 
 - ✅ **Picks up where you left off** — quit, restart or update ClaudeTerm and every open session reopens in its own folder, in the same order, with the same model and effort.
 - ✅ **The model and status of each session** — `Opus 5.5`, `Sonnet 5`, `Haiku 4.5` in orange beside the title, and whether it is busy, waiting for you, or idle.
 - ✅ **Blinks when Claude needs you** — a session waiting on a permission prompt or a question blinks amber, and so does one that finished while you were in another session, until you open it.
-- ✅ **Sessions from other terminals** — Claude Code running in iTerm, VS Code or anywhere else shows up under *Other terminals*, with the same status.
+- ✅ **Sessions from other terminals** — Claude Code running in iTerm, VS Code or anywhere else shows up under *Other terminals*, with the same status. Double-click one to continue it here: Claude Code can't run one session twice, so it opens as a copy (`--fork-session`) and the other terminal is left alone.
 - ✅ **A detail panel per session** (ⓘ) — tokens, messages, tool calls, subagents, working time, and how full the context window is. [More](#session-details)
 - ✅ **Where the standing context goes** — which `CLAUDE.md`, the MCP instructions, the tool and agent listings, and **tokens per skill**: the skills loaded in the session and each skill's share of the listing sent on every turn.
 - ✅ **Your limits** — this session's context, the five-hour window and the weekly window (used, remaining, reset time) in the status bar. Amber at 70%, red at 90%, and a notification once a window passes 90%.
 - ✅ **Model, effort and folder on launch** — pick the model the way Claude Code's `/model` shows it, effort from auto to max, and the folder to start in; each button shows the exact `claude` command it runs. The last choices are remembered. [See it](#starting-a-session)
+- ✅ **Hand a session to another agent** — right-click a past session (or one in *Other terminals*) and pick *Continue in Codex*, *Claude Code*, *Gemini CLI* or *Copilot CLI*. The earlier conversation — what was asked and answered, without tool output — is written to a file the new agent reads first. No extra model call.
+- ✅ **Settings** (⚙ beside the language picker) — terminal and sidebar text size. Drag the sidebar's right edge to make it wider or narrower.
 - ✅ **Light and dark** — follows macOS, or pick one. The terminal follows too.
 - ✅ **Open at login** — one checkbox in the status bar starts ClaudeTerm when you log in (in the built app; `npm start` leaves it off).
-- ✅ **Several sessions in one window**, renameable — including ones running in other terminals (double-click a title) — GPU-rendered (WebGL) for fast scrolling.
+- ✅ **Several sessions in one window**, renameable — including ones running in other terminals (✎) — GPU-rendered (WebGL) for fast scrolling.
 - ✅ **English, German, Turkish and Spanish** — English by default, switchable from 🌐; the choice is remembered.
 - ✅ **No changes to your Claude Code setup**, no telemetry, no network calls of its own. [More](#privacy)
 
@@ -82,8 +84,10 @@ The static block is measured from the first turn. The named rows are estimated f
 | Key | Does |
 | --- | --- |
 | <kbd>Esc</kbd> | Close the detail panel |
-| Double-click a title | Rename the session |
+| Double-click a title | Rename the session (in *Other terminals*: continue it here as a copy) |
+| Right-click a session | Continue it, hand it to another agent, rename it |
 | Drag a session | Move it up or down in the list |
+| Drag the sidebar edge | Make the sidebar wider or narrower |
 | <kbd>↵</kbd> / <kbd>Esc</kbd> while renaming | Save / cancel (an empty name restores the automatic title) |
 | <kbd>⌘</kbd> <kbd>Q</kbd> (macOS) / <kbd>Ctrl</kbd> <kbd>Q</kbd> (Windows) | Quit — waits for every session to exit cleanly |
 
@@ -96,7 +100,7 @@ Read-only, local, and no telemetry.
 - **Session details and history** are read from the transcripts in `~/.claude/projects/`.
 - **Codex sessions** are read from Codex's own files: the rollout transcripts in `~/.codex/sessions/` and the thread names in `~/.codex/session_index.jsonl`. Nothing under `~/.codex` is written.
 - **Gemini CLI and Copilot CLI sessions** are read from `~/.gemini/tmp/*/chats/` and `~/.copilot/session-state/`. Copilot's format is undocumented, so its status is best effort. Antigravity CLI conversations in `~/.gemini/antigravity-cli/conversations/` are only listed by id and time; their contents aren't read. None of these folders is written.
-- **What it writes:** only its own app data — the status line settings file, one small status file per open session (deleted when it closes), and your chosen titles, language, theme, model and effort. *Open at login* adds ClaudeTerm to macOS Login Items, and unticking it removes it.
+- **What it writes:** only its own app data — the status line settings file, one small status file per open session (deleted when it closes), handoff files when you hand a session to another agent, and your chosen titles, language, theme, model, effort, text sizes and sidebar width. *Open at login* adds ClaudeTerm to macOS Login Items, and unticking it removes it.
 - **Network:** none. ClaudeTerm makes no requests of its own; Claude Code talks to Anthropic as it always does.
 
 ## FAQ
