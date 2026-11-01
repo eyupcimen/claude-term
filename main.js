@@ -454,8 +454,34 @@ function listHistory(limit = 40) {
 
 // --- Window ----------------------------------------------------------------
 
+// Status files are removed when a session closes; a crash leaves them behind.
+// Drop those of app instances that are no longer running.
+function removeStaleStatusFiles() {
+  const dir = app.getPath('userData');
+  let names = [];
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    const m = /^status-(\d+)-\d+\.json$/.exec(name);
+    if (!m || Number(m[1]) === process.pid) continue;
+    try {
+      process.kill(Number(m[1]), 0);
+      continue; // still running
+    } catch (e) {
+      if (e.code === 'EPERM') continue;
+    }
+    try {
+      fs.unlinkSync(path.join(dir, name));
+    } catch {}
+  }
+}
+
 function createWindow() {
   settingsFile = writeSettingsFile();
+  removeStaleStatusFiles();
 
   win = new BrowserWindow({
     width: 1200,

@@ -21,6 +21,25 @@ const AGENT_NAMES = {
 };
 const AGENT_COMMANDS = { antigravity: 'agy' };
 const limits = Object.fromEntries(AGENTS.map((a) => [a, { fiveHour: null, weekly: null }]));
+// Agents only report limits after their first reply, so the last known ones
+// are kept and shown from the start. A window that has since reset is dropped.
+try {
+  const saved = JSON.parse(localStorage.getItem('claudeterm-limits') || '{}');
+  for (const [agent, keys] of Object.entries(saved)) {
+    if (!limits[agent]) continue;
+    for (const [key, v] of Object.entries(keys || {})) {
+      if (v && v.resetsAt && new Date(v.resetsAt) > new Date()) {
+        limits[agent][key] = { percent: v.percent, resetsAt: new Date(v.resetsAt) };
+      }
+    }
+  }
+} catch {}
+
+function saveLimits() {
+  try {
+    localStorage.setItem('claudeterm-limits', JSON.stringify(limits));
+  } catch {}
+}
 let editing = false; // sidebar re-renders are paused while a title is being edited
 // Every Claude Code session running on this machine, by session id, from
 // ~/.claude/sessions. Ours get their status from it; the rest are listed apart.
@@ -276,6 +295,7 @@ window.claudeTerm.onStatusUpdate((msg) => {
       resetsAt: toDate(msg[key].resets_at),
     };
     alertLimit(agent, key, limits[agent][key]);
+    saveLimits();
   }
   render();
 });
