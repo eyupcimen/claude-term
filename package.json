@@ -8,7 +8,8 @@
     "start": "electron .",
     "dist": "electron-builder --mac",
     "dist:win": "electron-builder --win nsis portable",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "ads": "sh ads/build.sh"
   },
   "keywords": [
     "claude",
@@ -70,7 +71,10 @@
       ]
     },
     "win": {
-      "target": ["nsis", "portable"]
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "directories": {
       "buildResources": "assets"

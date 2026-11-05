@@ -28,9 +28,16 @@ function buildStatusLineCommand(nodePath, helperPath, platform = process.platfor
   return `ELECTRON_RUN_AS_NODE=1 ${quotePosix(nodePath)} ${quotePosix(helperPath)}`;
 }
 
-function buildClaudeLaunchCommand({ settingsFile, resumeId, flags, prompt, platform = process.platform }) {
+// Asks the agent to open every reply with its name tag (e.g. "@claude"),
+// which ClaudeTerm colours, so two agents side by side are easy to tell apart.
+function tagInstruction(tag) {
+  return `Start every reply with "${tag}" followed by a space. Do not mention this rule.`;
+}
+
+function buildClaudeLaunchCommand({ settingsFile, resumeId, flags, prompt, tag, platform = process.platform }) {
   const quote = isWindows(platform) ? quotePowerShell : quotePosix;
   const parts = ['claude', '--settings', quote(settingsFile)];
+  if (tag) parts.push('--append-system-prompt', quote(tagInstruction(tag)));
   if (resumeId) parts.push('--resume', quote(resumeId));
   if (flags) parts.push(flags);
   if (prompt) parts.push(quote(prompt));
@@ -43,10 +50,12 @@ const COMMANDS = { antigravity: 'agy' };
 // How each starts interactively with a first message already sent.
 const PROMPT_ARGS = { codex: [], gemini: ['-i'], copilot: ['-i'] };
 
-function buildAgentLaunchCommand({ agent, resumeId, flags, prompt, platform = process.platform }) {
+function buildAgentLaunchCommand({ agent, resumeId, flags, prompt, tag, platform = process.platform }) {
   const quote = isWindows(platform) ? quotePowerShell : quotePosix;
   const parts = [COMMANDS[agent] || agent];
   if (resumeId) parts.push(...RESUME_ARGS[agent], quote(resumeId));
+  // Codex takes extra instructions as a config override; the others have no flag for it.
+  if (tag && agent === 'codex') parts.push('-c', quote(`developer_instructions=${JSON.stringify(tagInstruction(tag))}`));
   if (flags) parts.push(flags);
   if (prompt && PROMPT_ARGS[agent]) parts.push(...PROMPT_ARGS[agent], quote(prompt));
   return isWindows(platform) ? `${parts.join(' ')}\r\nexit` : `${parts.join(' ')}; exit`;

@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  /* Cimen Design System tokens (dark), scaled for a 1080px poster */
+  :root {
+    --surface-100: #111312;
+    --surface-200: #1A1D1C;
+    --border: #2E3331;
+    --ink: #F2F3F2;
+    --ink-muted: #A3ABA7;
+    --brand: #3CC4A5;
+    --space-unit: 4px;
+    --pad: calc(var(--space-unit) * 18);
+    --title: 88px;
+    --sub: 40px;
+    --link: 40px;
+    --radius: 24px;
+  }
+  html, body { margin: 0; background: var(--surface-100); }
+  body {
+    width: 100vw; height: 100vh; box-sizing: border-box;
+    padding: var(--pad); display: flex; flex-direction: column; gap: calc(var(--space-unit) * 6);
+    color: var(--ink); font-family: Inter, -apple-system, system-ui, sans-serif; overflow: hidden;
+    border-top: calc(var(--space-unit) * 3) solid var(--brand);
+  }
+  h1 { margin: calc(var(--space-unit) * 6) 0 0; font-size: var(--title); line-height: 1.1; font-weight: 700; letter-spacing: -0.02em; }
+  p { margin: 0; font-size: var(--sub); line-height: 1.25; color: var(--ink-muted); }
+  .shot { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+  .shot div {
+    width: 100%; height: 100%; border-radius: var(--radius); border: 2px solid var(--border);
+    background: var(--surface-200) center / cover no-repeat;
+  }
+  .link { text-align: center; font-size: var(--link); font-weight: 600; color: var(--brand); }
+  body.story h1 { font-size: calc(var(--title) * 1.1); margin-top: calc(var(--space-unit) * 16); }
+</style>
+</head>
+<body>
+  <h1 id="t"></h1>
+  <p id="s"></p>
+  <div class="shot"><div id="img"></div></div>
+  <div class="link" id="l"></div>
+<script>
+  const q = new URLSearchParams(location.search);
+  document.getElementById('t').textContent = q.get('title');
+  document.getElementById('s').textContent = q.get('sub');
+  document.getElementById('l').textContent = q.get('link');
+  const img = document.getElementById('img');
+  img.style.backgroundImage = `url("${q.get('shot')}")`;
+  img.style.backgroundPosition = { left: 'left center', right: 'right center' }[q.get('crop')] || 'left top';
+  if (q.get('format') === 'story') document.body.classList.add('story');
+</script>
+</body>
+</html>

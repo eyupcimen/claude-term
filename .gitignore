@@ -5,3 +5,8 @@ dist/
 build/
 ROADMAP-windows.md
 ClaudeTerm_Instagram/
+
+# Tasarım dosyaları public repoya girmez
+design/
+ai-design-check.json
+FIKIRLER.md

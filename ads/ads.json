@@ -1,0 +1,11 @@
+{
+  "link": "github.com/eyupcimen/claude-term",
+  "scenes": ["detail", "main", "detail-light", "launch"],
+  "slides": [
+    { "shot": "detail", "tr": ["Claude Code token'larım nereye gidiyor?", "Kendi terminalimi yazdım: ClaudeTerm"], "en": ["Where do my Claude Code tokens go?", "So I built my own terminal: ClaudeTerm"] },
+    { "shot": "main", "tr": ["4 oturum, tek pencere", "Hangisi çalışıyor, hangisi seni bekliyor, bir bakışta"], "en": ["Four sessions, one window", "See which one is working and which one needs you"] },
+    { "shot": "detail", "crop": "right", "tr": ["Context ve limitler hep önünde", "5 saatlik ve haftalık limit, oturum context'i"], "en": ["Context and limits, always in view", "5-hour and weekly limits, session context"] },
+    { "shot": "launch", "tr": ["Claude Code, Codex, Gemini, Copilot", "Ajanı ve modeli seç, başlat"], "en": ["Claude Code, Codex, Gemini, Copilot", "Pick the agent and model, start"] },
+    { "shot": "detail-light", "tr": ["Açık tema, açık kaynak", "Ücretsiz, macOS ve Windows"], "en": ["Light mode, open source", "Free, macOS and Windows"] }
+  ]
+}

@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('claudeTerm', {
   platform: process.platform,
   createSession: (opts) => ipcRenderer.invoke('session-create', opts),
   closeSession: (id) => ipcRenderer.send('session-close', id),
+  confirmClose: (text) => ipcRenderer.invoke('confirm-close', text),
+  onMenuCloseSession: (cb) => ipcRenderer.on('menu-close-session', () => cb()),
   listHistory: () => ipcRenderer.invoke('history-list'),
   listLive: () => ipcRenderer.invoke('sessions-live'),
   sessionDetail: (id) => ipcRenderer.invoke('session-detail', id),
@@ -18,4 +20,6 @@ contextBridge.exposeInMainWorld('claudeTerm', {
   onPtyData: (cb) => ipcRenderer.on('pty-data', (_e, msg) => cb(msg)),
   onStatusUpdate: (cb) => ipcRenderer.on('status-update', (_e, msg) => cb(msg)),
   onSessionExit: (cb) => ipcRenderer.on('session-exit', (_e, msg) => cb(msg)),
+  demoMode: () => ipcRenderer.invoke('demo-mode'),
+  onDemoScene: (cb) => ipcRenderer.on('demo-scene', (_e, scene) => cb(scene)),
 });

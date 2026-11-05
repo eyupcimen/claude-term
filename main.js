@@ -10,6 +10,7 @@ const gemini = require('./gemini');
 const copilot = require('./copilot');
 const antigravity = require('./antigravity');
 const { prepareHandoff, handoffPrompt } = require('./handoff');
+const demo = process.env.CLAUDETERM_DEMO ? require('./demo') : null;
 const {
   terminalShell,
   buildStatusLineCommand,
@@ -212,7 +213,7 @@ function watchAgentLog(id, agent, { cwd, resumeId, since }) {
   }, 1000);
 }
 
-function createSession({ agent = 'claude', flags, resumeId, cwd, prompt }) {
+function createSession({ agent = 'claude', flags, resumeId, cwd, prompt, tag }) {
   const id = nextId++;
   const statusFile = path.join(app.getPath('userData'), `status-${process.pid}-${id}.json`);
   try {
@@ -258,8 +259,8 @@ function createSession({ agent = 'claude', flags, resumeId, cwd, prompt }) {
 
   const command =
     agent === 'claude'
-      ? buildClaudeLaunchCommand({ settingsFile, resumeId, flags, prompt })
-      : buildAgentLaunchCommand({ agent, resumeId, flags, prompt });
+      ? buildClaudeLaunchCommand({ settingsFile, resumeId, flags, prompt, tag })
+      : buildAgentLaunchCommand({ agent, resumeId, flags, prompt, tag });
   setTimeout(() => {
     if (sessions.has(id)) p.write(command + '\r');
   }, 400);
@@ -484,16 +485,38 @@ function createWindow() {
   removeStaleStatusFiles();
 
   win = new BrowserWindow({
-    width: 1200,
-    height: 720,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#141413' : '#faf9f5',
+    width: Number(process.env.CLAUDETERM_WIDTH) || 1200,
+    height: Number(process.env.CLAUDETERM_HEIGHT) || 720,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#111312' : '#FAFAF9',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
+      // Screenshot runs capture a window that may sit behind others.
+      backgroundThrottling: !process.env.CLAUDETERM_SHOT,
     },
   });
 
   win.loadFile('index.html');
+  // Screenshot run: CLAUDETERM_SHOT=<dir> saves one PNG per scene and quits.
+  // CLAUDETERM_SCENES picks the scenes (comma-separated); the renderer sets each up.
+  if (process.env.CLAUDETERM_SHOT) {
+    const dir = process.env.CLAUDETERM_SHOT;
+    const scenes = (process.env.CLAUDETERM_SCENES || 'main').split(',');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    win.webContents.once('did-finish-load', async () => {
+      fs.mkdirSync(dir, { recursive: true });
+      await wait(5000);
+      for (const scene of scenes) {
+        send('demo-scene', scene);
+        await wait(1500);
+        win.webContents.invalidate();
+        await wait(300);
+        const img = await win.webContents.capturePage();
+        fs.writeFileSync(path.join(dir, `${scene}.png`), img.toPNG());
+      }
+      app.quit();
+    });
+  }
   win.webContents.on('console-message', (e) => {
     if (e.level === 'error') console.error('[renderer]', e.message);
   });
@@ -505,14 +528,37 @@ function createWindow() {
 }
 
 function installAppMenu() {
-  const quit = { role: 'quit', accelerator: process.platform === 'darwin' ? 'Command+Q' : 'Ctrl+Q' };
+  const mac = process.platform === 'darwin';
+  const quit = { role: 'quit', accelerator: mac ? 'Command+Q' : 'Ctrl+Q' };
+  // Cmd/Ctrl+W asks the renderer to close the active session (it confirms first).
+  const closeSession = {
+    label: 'Close Session',
+    accelerator: 'CmdOrCtrl+W',
+    click: () => send('menu-close-session'),
+  };
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { role: 'fileMenu', submenu: [quit] },
+    // macOS app menu carries Hide (Cmd+H), Hide Others and Quit.
+    ...(mac ? [{ role: 'appMenu' }] : []),
+    { label: 'File', submenu: mac ? [closeSession] : [closeSession, { type: 'separator' }, quit] },
     { role: 'editMenu' },
   ]));
 }
 
-ipcMain.handle('session-create', (_e, opts) => createSession(opts));
+ipcMain.handle('confirm-close', async (_e, text) => {
+  if (!win) return false;
+  const { response } = await dialog.showMessageBox(win, {
+    type: 'question',
+    buttons: [text.close, text.cancel],
+    defaultId: 0,
+    cancelId: 1,
+    message: text.message,
+    detail: text.detail,
+  });
+  return response === 0;
+});
+
+ipcMain.handle('session-create', (_e, opts) => (demo ? demo.createSession(send) : createSession(opts)));
+ipcMain.handle('demo-mode', () => (demo ? { count: demo.count } : null));
 // Which agent CLIs the user's login shell can find, checked once: the app's own
 // PATH lacks what shell profiles add (Homebrew, npm globals).
 let installedAgents = null;
@@ -541,6 +587,7 @@ ipcMain.handle('handoff-prepare', (_e, from) => {
   return file ? handoffPrompt(file, from.agent) : null;
 });
 ipcMain.handle('history-list', () => {
+  if (demo) return demo.history();
   const items = [
     ...listHistory(),
     ...codex.listCodexHistory(),
@@ -575,8 +622,8 @@ ipcMain.handle('folder-pick', async (_e, current) => {
   });
   return res.canceled ? null : res.filePaths[0];
 });
-ipcMain.handle('sessions-live', () => listLive());
-ipcMain.handle('session-detail', (_e, id) => readDetail(id));
+ipcMain.handle('sessions-live', () => (demo ? demo.live() : listLive()));
+ipcMain.handle('session-detail', (_e, id) => (demo ? demo.detail(id) : readDetail(id)));
 ipcMain.on('session-close', (_e, id) => closeSession(id));
 ipcMain.on('pty-input', (_e, { id, data }) => {
   const s = sessions.get(id);
@@ -589,6 +636,9 @@ ipcMain.on('pty-resize', (_e, { id, cols, rows }) => {
     s.pty.resize(cols, rows);
   } catch {}
 });
+
+// A separate profile (screenshots, demos) leaves the real sessions alone.
+if (process.env.CLAUDETERM_DATA) app.setPath('userData', process.env.CLAUDETERM_DATA);
 
 app.whenReady().then(() => {
   // The packaged app gets its icon from the bundle; `npm start` would show Electron's.

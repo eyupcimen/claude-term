@@ -70,12 +70,71 @@ const $ = (id) => document.getElementById(id);
 
 // --- Settings: text sizes and sidebar width --------------------------------
 
-const DEFAULT_SETTINGS = { termFont: 14, sidebarFont: 12.5, sidebarWidth: 280 };
+// Name tag each agent starts its replies with, and its colour in the terminal.
+const DEFAULT_TAGS = {
+  claude: { label: '@claude', color: '#4CC77A' },
+  codex: { label: '@codex', color: '#FF6B60' },
+  gemini: { label: '@gemini', color: '#6FA8FF' },
+  copilot: { label: '@copilot', color: '#B9A6FF' },
+  antigravity: { label: '@antigravity', color: '#F0B44C' },
+};
+// Where sessions are listed: a sidebar (left/right) or tabs (top/bottom).
+const LAYOUTS = ['left', 'right', 'top', 'bottom'];
+const DEFAULT_SETTINGS = {
+  termFont: 14,
+  sidebarFont: 12.5,
+  sidebarWidth: 272,
+  tags: DEFAULT_TAGS,
+  layout: 'left',
+  lastSide: 'left', // the arrow button switches between the last sidebar and tab places
+  lastTabs: 'top',
+};
 const SIZE_LIMITS = { term: [10, 28, 1], sidebar: [10, 18, 0.5] };
 let settings = { ...DEFAULT_SETTINGS };
 try {
   Object.assign(settings, JSON.parse(localStorage.getItem('claudeterm-settings') || '{}'));
 } catch {}
+settings.tags = Object.fromEntries(
+  Object.entries(DEFAULT_TAGS).map(([a, d]) => [a, { ...d, ...(settings.tags || {})[a] }])
+);
+
+// Colours every agent's tag in terminal output. Same text, same width, so the
+// agent's screen layout is untouched; only the colour codes are added.
+function colorTags(data) {
+  for (const { label, color } of Object.values(settings.tags)) {
+    if (!label || !data.includes(label)) continue;
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
+    data = data.split(label).join(`\x1b[1;38;2;${r};${g};${b}m${label}\x1b[22;39m`);
+  }
+  return data;
+}
+
+function renderTagRows() {
+  $('tagRows').replaceChildren(
+    ...Object.entries(settings.tags).map(([agent, tag]) => {
+      const row = el('div', 'tagRow');
+      row.appendChild(el('span', 'agentName', AGENT_NAMES[agent]));
+      const label = el('input');
+      label.type = 'text';
+      label.value = tag.label;
+      label.spellcheck = false;
+      label.addEventListener('change', () => {
+        tag.label = label.value.trim() || DEFAULT_TAGS[agent].label;
+        label.value = tag.label;
+        saveSettings();
+      });
+      const color = el('input');
+      color.type = 'color';
+      color.value = tag.color;
+      color.addEventListener('input', () => {
+        tag.color = color.value;
+        saveSettings();
+      });
+      row.append(label, color);
+      return row;
+    })
+  );
+}
 
 function saveSettings() {
   try {
@@ -89,7 +148,11 @@ function applySettings() {
   const zoom = settings.sidebarFont / DEFAULT_SETTINGS.sidebarFont;
   for (const id of ['sidebarTop', 'sessionLists']) $(id).style.zoom = zoom;
   $('sidebar').style.width = settings.sidebarWidth + 'px';
-  for (const s of sessions.values()) s.term.options.fontSize = settings.termFont;
+  for (const s of sessions.values()) {
+    s.term.options.fontSize = settings.termFont;
+    s.fit.fit(); // hidden panes too, so switching to them doesn't show a stale grid
+  }
+  applyLayout();
   $('termFontValue').textContent = settings.termFont + ' px';
   $('sidebarFontValue').textContent = settings.sidebarFont + ' px';
   fitActive();
@@ -99,21 +162,21 @@ function applySettings() {
 
 const TERM_THEMES = {
   dark: {
-    background: '#141413',
-    foreground: '#ecebe7',
-    cursor: '#ecebe7',
-    cursorAccent: '#141413',
-    selectionBackground: 'rgba(217, 119, 87, 0.3)',
+    background: '#0C0E0D',
+    foreground: '#F2F3F2',
+    cursor: '#3CC4A5',
+    cursorAccent: '#0C0E0D',
+    selectionBackground: 'rgba(60, 196, 165, 0.3)',
   },
   // Darker ANSI colours so text written for dark terminals stays readable.
   light: {
-    background: '#faf9f5',
-    foreground: '#1f1e1d',
-    cursor: '#1f1e1d',
-    cursorAccent: '#faf9f5',
-    selectionBackground: 'rgba(196, 97, 63, 0.25)',
-    black: '#1f1e1d',
-    red: '#b5483e',
+    background: '#FFFFFF',
+    foreground: '#171A19',
+    cursor: '#0E7A64',
+    cursorAccent: '#FFFFFF',
+    selectionBackground: 'rgba(14, 122, 100, 0.25)',
+    black: '#171A19',
+    red: '#C2342B',
     green: '#4f7a2a',
     yellow: '#94700e',
     blue: '#2f5f9e',
@@ -213,7 +276,32 @@ function createTermPane(id) {
     term.loadAddon(webgl);
   } catch {}
   term.onData((data) => window.claudeTerm.sendInput(id, data));
+  smoothWheel(term, pane);
   return { term, fit, pane };
+}
+
+// Trackpad scrolling in the normal buffer moves exactly one line per line-height
+// of finger travel, so it ticks line by line instead of jumping. A mouse wheel
+// notch moves 3 lines. When an app inside (alternate screen or mouse tracking)
+// owns the wheel, xterm handles it as before.
+function smoothWheel(term, pane) {
+  let pending = 0;
+  term.attachCustomWheelEventHandler((e) => {
+    if (e.ctrlKey || term.buffer.active.type !== 'normal' || term.modes.mouseTrackingMode !== 'none') return true;
+    const lineHeight = pane.clientHeight / Math.max(term.rows, 1) || 16;
+    let lines;
+    if (e.deltaMode === 1) lines = e.deltaY;
+    else if (e.deltaMode === 2) lines = e.deltaY * term.rows;
+    else if (e.wheelDeltaY && e.wheelDeltaY % 120 === 0 && Math.abs(e.deltaY) >= 1) lines = Math.sign(e.deltaY) * 3;
+    else {
+      pending += e.deltaY;
+      lines = Math.trunc(pending / lineHeight);
+      pending -= lines * lineHeight;
+    }
+    if (lines) term.scrollLines(lines);
+    e.preventDefault();
+    return false;
+  });
 }
 
 function fitActive() {
@@ -230,6 +318,8 @@ function setActive(id) {
   for (const [sid, s] of sessions) s.pane.classList.toggle('visible', sid === id);
   $('placeholder').style.display = sessions.size ? 'none' : 'flex';
   const s = sessions.get(id);
+  // An open detail panel follows the session you switch to.
+  if (detailId && s?.sessionId && s.sessionId !== detailId) openDetail(s.sessionId);
   if (s) {
     fitActive();
     s.term.focus();
@@ -253,11 +343,13 @@ function removeSession(id) {
   refreshHistory();
 }
 
-window.addEventListener('resize', fitActive);
+// Refit whenever the terminal area changes size: window, detail panel,
+// sidebar width, or a font change that moves the layout.
+new ResizeObserver(() => fitActive()).observe($('terminals'));
 
 window.claudeTerm.onPtyData(({ id, data }) => {
   const s = sessions.get(id);
-  if (s) s.term.write(data);
+  if (s) s.term.write(colorTags(data));
 });
 
 window.claudeTerm.onSessionExit(({ id }) => removeSession(id));
@@ -553,6 +645,7 @@ async function startSession(flags, resume, folder, focus = true, agent = 'claude
   const { id, cwd, home } = await window.claudeTerm.createSession({
     agent,
     prompt,
+    tag: settings.tags[agent]?.label,
     // Not kept in `flags`: a restored copy resumes its own id, without forking again.
     flags: [resume?.fork ? '--fork-session' : '', flags].filter(Boolean).join(' '),
     resumeId: resume?.id,
@@ -621,12 +714,16 @@ $('btnCancel').addEventListener('click', closeLaunchModal);
 
 // --- Settings dialog -------------------------------------------------------
 
-$('btnSettings').addEventListener('click', () => $('settingsModal').classList.add('open'));
+$('btnSettings').addEventListener('click', () => {
+  renderTagRows();
+  $('settingsModal').classList.add('open');
+});
 $('btnSettingsDone').addEventListener('click', () => $('settingsModal').classList.remove('open'));
 $('btnSettingsReset').addEventListener('click', () => {
-  settings = { ...DEFAULT_SETTINGS };
+  settings = { ...DEFAULT_SETTINGS, tags: structuredClone(DEFAULT_TAGS) };
   saveSettings();
   applySettings();
+  renderTagRows();
 });
 for (const b of document.querySelectorAll('.stepper button')) {
   b.addEventListener('click', () => {
@@ -638,6 +735,171 @@ for (const b of document.querySelectorAll('.stepper button')) {
   });
 }
 
+// --- Layout: sidebar or tabs ---------------------------------------------------
+
+const isTabs = (layout) => layout === 'top' || layout === 'bottom';
+
+function applyLayout() {
+  const layout = settings.layout;
+  $('app').classList.remove('side-right', 'tabs-top', 'tabs-bottom');
+  if (layout === 'right') $('app').classList.add('side-right');
+  if (isTabs(layout)) $('app').classList.add('tabs-' + layout);
+  $('tabBar').hidden = !isTabs(layout);
+  // The layout button sits with the session list: next to "New session" in
+  // the sidebar, next to "+" in the tab bar. Its icon shows the current layout.
+  const btn = $('btnLayout');
+  if (isTabs(layout)) $('tabBar').appendChild(btn);
+  else $('sidebarTop').appendChild(btn);
+  btn.innerHTML = layoutIcon(layout, 16);
+  btn.title = `${t(currentLang, 'layout')}: ${t(currentLang, 'layout_' + layout)} (${LAYOUT_KEY})`;
+  $('layoutPicker').value = layout;
+}
+
+function setLayout(layout) {
+  settings.layout = layout;
+  if (isTabs(layout)) settings.lastTabs = layout;
+  else settings.lastSide = layout;
+  saveSettings();
+  applyLayout();
+  renderTabs();
+  fitActive();
+}
+
+const LAYOUT_KEY = window.claudeTerm.platform === 'darwin' ? '⌘⇧L' : 'Ctrl+Shift+L';
+const toggleLayout = () => setLayout(isTabs(settings.layout) ? settings.lastSide : settings.lastTabs);
+
+// A window with the session list's edge filled in.
+function layoutIcon(layout, size) {
+  const bar = {
+    left: '<rect x="3" y="5" width="6" height="14" rx="1" fill="currentColor" stroke="none"/>',
+    right: '<rect x="15" y="5" width="6" height="14" rx="1" fill="currentColor" stroke="none"/>',
+    top: '<rect x="3" y="5" width="18" height="4" rx="1" fill="currentColor" stroke="none"/>',
+    bottom: '<rect x="3" y="15" width="18" height="4" rx="1" fill="currentColor" stroke="none"/>',
+  }[layout];
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2.5"/>${bar}</svg>`;
+}
+
+function showLayoutMenu(x, y, withToggle) {
+  const menu = $('ctxMenu');
+  menu.replaceChildren();
+  if (withToggle) {
+    const to = isTabs(settings.layout) ? settings.lastSide : settings.lastTabs;
+    const b = menuItem('', toggleLayout);
+    b.className = 'layoutItem';
+    b.innerHTML = `${layoutIcon(to, 16)}<span>${t(currentLang, isTabs(settings.layout) ? 'layout_toSidebar' : 'layout_toTabs')}</span><span class="key">${LAYOUT_KEY}</span>`;
+    menu.append(b, el('hr'));
+  }
+  for (const v of LAYOUTS) {
+    const b = menuItem('', () => setLayout(v));
+    b.className = 'layoutItem';
+    b.innerHTML = `${layoutIcon(v, 16)}<span>${t(currentLang, 'layout_' + v)}</span>${v === settings.layout ? '<span class="check">✓</span>' : ''}`;
+    menu.appendChild(b);
+  }
+  menu.hidden = false;
+  const { innerWidth: w, innerHeight: h } = window;
+  menu.style.left = Math.max(4, Math.min(x, w - menu.offsetWidth - 4)) + 'px';
+  menu.style.top = Math.max(4, Math.min(y, h - menu.offsetHeight - 4)) + 'px';
+}
+
+$('btnLayout').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const r = e.currentTarget.getBoundingClientRect();
+  // Below the button, or above it when the tabs are at the bottom.
+  const menuH = 5 * 32 + 8;
+  showLayoutMenu(r.left, settings.layout === 'bottom' ? r.top - menuH - 4 : r.bottom + 4, false);
+});
+$('btnLayout').addEventListener('mousedown', (e) => e.stopPropagation());
+// Right-click on the list's empty space or the tab bar.
+for (const id of ['sessionLists', 'tabBar']) {
+  $(id).addEventListener('contextmenu', (e) => {
+    if (e.target.closest('.item, .tab')) return;
+    e.preventDefault();
+    showLayoutMenu(e.clientX, e.clientY, true);
+  });
+}
+// Captured before the terminal so the key never reaches the agent.
+window.addEventListener(
+  'keydown',
+  (e) => {
+    const mod = window.claudeTerm.platform === 'darwin' ? e.metaKey : e.ctrlKey;
+    if (mod && e.shiftKey && e.code === 'KeyL') {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleLayout();
+    }
+  },
+  true
+);
+$('layoutPicker').addEventListener('change', (e) => setLayout(e.target.value));
+$('btnTabNew').addEventListener('click', () => openLaunchModal(null));
+
+function fillLayoutPicker() {
+  $('layoutPicker').replaceChildren(
+    ...LAYOUTS.map((v) => {
+      const o = el('option', null, t(currentLang, 'layout_' + v));
+      o.value = v;
+      return o;
+    })
+  );
+  $('layoutPicker').value = settings.layout;
+}
+
+function closeTab(id) {
+  window.claudeTerm.closeSession(id);
+  removeSession(id);
+}
+
+// Safari-like tabs: equal widths that shrink as tabs are added, the agent's
+// icon on the left, replaced by × on hover.
+function renderTabs() {
+  if (!isTabs(settings.layout)) return;
+  $('tabs').replaceChildren(
+    ...[...sessions].map(([id, s]) => {
+      const info = s.agent === 'claude' && s.sessionId && live.get(s.sessionId);
+      const status = s.agent !== 'claude' ? s.agentStatus || 'idle' : info ? info.status : 'idle';
+      const tab = el('div', 'tab' + (id === activeId ? ' active' : ''));
+      const title = activeTitle(s);
+      tab.title = `${title} — ${AGENT_NAMES[s.agent]}${s.model ? ' · ' + s.model : ''}`;
+      if (id !== activeId && (status === 'waiting' || attention.has(s.sessionId))) tab.classList.add('attention');
+      if (status === 'busy' && id !== activeId) tab.classList.add('busy');
+      const icon = el('span', 'icon', AGENT_BADGES[s.agent] || 'CC');
+      icon.style.background = settings.tags[s.agent]?.color;
+      const close = el('span', 'close', '×');
+      close.title = t(currentLang, 'close');
+      close.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeTab(id);
+      });
+      // Title on top, "Working" / "Needs you" under it while the agent is busy.
+      const text = el('span', 'text');
+      text.appendChild(el('span', 'label', title));
+      if (status === 'busy' || status === 'waiting') {
+        const st = el('span', 'status ' + status);
+        st.append(el('span', 'dot ' + status), el('span', null, t(currentLang, 'status_' + status)));
+        text.appendChild(st);
+      }
+      tab.append(icon, close, text);
+      tab.addEventListener('click', () => setActive(id));
+      tab.addEventListener('auxclick', (e) => e.button === 1 && closeTab(id));
+      makeDraggable(tab, id);
+      return tab;
+    })
+  );
+  $('tabs').querySelector('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+// A vertical wheel over the tab row scrolls it sideways.
+$('tabs').addEventListener(
+  'wheel',
+  (e) => {
+    const row = e.currentTarget;
+    if (row.scrollWidth <= row.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    row.scrollLeft += e.deltaY;
+    e.preventDefault();
+  },
+  { passive: false }
+);
+
 // --- Sidebar width -----------------------------------------------------------
 
 $('sidebarResize').addEventListener('mousedown', (e) => {
@@ -647,7 +909,8 @@ $('sidebarResize').addEventListener('mousedown', (e) => {
   const startWidth = $('sidebar').offsetWidth;
   handle.classList.add('dragging');
   const move = (ev) => {
-    settings.sidebarWidth = Math.round(Math.min(640, Math.max(180, startWidth + ev.clientX - startX)));
+    const dx = settings.layout === 'right' ? startX - ev.clientX : ev.clientX - startX;
+    settings.sidebarWidth = Math.round(Math.min(640, Math.max(180, startWidth + dx)));
     applySettings();
   };
   const up = () => {
@@ -679,6 +942,18 @@ function menuItem(label, onClick) {
     onClick();
   });
   return b;
+}
+
+// Simple menu without the continue/handoff items (sessions running in this window).
+function showPlainMenu(e, items) {
+  e.preventDefault();
+  const menu = $('ctxMenu');
+  menu.replaceChildren();
+  for (const [label, fn] of items) menu.appendChild(menuItem(label, fn));
+  menu.hidden = false;
+  const { innerWidth: w, innerHeight: h } = window;
+  menu.style.left = Math.min(e.clientX, w - menu.offsetWidth - 4) + 'px';
+  menu.style.top = Math.min(e.clientY, h - menu.offsetHeight - 4) + 'px';
 }
 
 // `entry` is a past or running session: { id, agent, cwd, title, running }.
@@ -819,23 +1094,38 @@ function statusPill(status) {
   return el('span', 'pill ' + status, t(currentLang, 'status_' + status));
 }
 
-// Title row: status dot, title, and the model in accent colour on the right.
-function nameRow(item, title, status, model) {
+const AGENT_BADGES = { claude: 'CC', codex: 'CX', gemini: 'GM', copilot: 'CP', antigravity: 'AG' };
+
+// Title row: status dot, title, and an optional mono note on the right
+// (the terminal app for other terminals, the age for history).
+function nameRow(item, title, status, right) {
   const row = el('div', 'nameRow');
-  const name = el('div', 'name');
-  if (status) name.appendChild(el('span', 'dot ' + status));
-  name.appendChild(document.createTextNode(title));
+  if (status) row.appendChild(el('span', 'dot ' + status));
+  const name = el('div', 'name', title);
   row.appendChild(name);
-  if (model) row.appendChild(el('span', 'model', model));
+  if (right) row.appendChild(el('span', 'src', right));
   item.appendChild(row);
   return name;
 }
 
-function metaRow(item, text, status) {
+// Mono line under the title: agent badge, model, status in words.
+function metaRow(item, agent, model, status) {
   const meta = el('div', 'meta');
-  if (status && status !== 'idle') meta.appendChild(statusPill(status));
-  meta.appendChild(el('span', 'text', text || '…'));
+  meta.appendChild(el('span', 'badge', AGENT_BADGES[agent] || 'CC'));
+  if (model) meta.appendChild(el('span', 'text', model));
+  if (status) {
+    if (model) meta.appendChild(el('span', 'sep', '·'));
+    meta.appendChild(el('span', 'st ' + status, t(currentLang, 'status_' + status)));
+  }
   item.appendChild(meta);
+}
+
+function shortAge(ms) {
+  const m = Math.max(0, (Date.now() - toDate(ms)) / 60000);
+  if (m < 60) return `${Math.round(m)}m`;
+  if (m < 1440) return `${Math.round(m / 60)}h`;
+  if (m < 10080) return `${Math.round(m / 1440)}d`;
+  return `${Math.round(m / 10080)}w`;
 }
 
 // --- Reorder by drag -------------------------------------------------------
@@ -883,6 +1173,7 @@ function makeDraggable(item, id) {
 
 function renderSidebar() {
   if (editing || dragId !== null) return;
+  renderTabs();
   const active = $('activeList');
   active.replaceChildren();
   if (!sessions.size) active.appendChild(el('div', 'empty', t(currentLang, 'noActive')));
@@ -895,10 +1186,9 @@ function renderSidebar() {
     const status = other ? s.agentStatus || 'idle' : info ? info.status : 'idle';
     // No need to blink the session you are looking at.
     if (id !== activeId || !document.hasFocus()) markAttention(item, s.sessionId, status);
-    const name = nameRow(item, title, status, s.model || info?.model || (other ? AGENT_NAMES[s.agent] : null));
-    const meta = [projectName(s.project)];
-    if (s.contextTokens != null) meta.push(`${s.contextTokens.toLocaleString(locale())} tok`);
-    metaRow(item, meta.join(' · '), status);
+    if (status === 'busy' && id !== activeId) item.classList.add('busy');
+    const name = nameRow(item, title, status);
+    metaRow(item, s.agent, s.model || info?.model, status);
     itemActions(
       item,
       name,
@@ -911,6 +1201,14 @@ function renderSidebar() {
       other ? null : s.sessionId // the detail panel reads Claude Code transcripts
     );
     item.addEventListener('click', () => setActive(id));
+    if (!other && s.sessionId) {
+      item.addEventListener('contextmenu', (e) =>
+        showPlainMenu(e, [
+          [t(currentLang, 'menuRename'), () => startRename(name, title, (v) => setActiveTitle(s, v))],
+          [t(currentLang, 'tokenDetails'), () => openDetail(s.sessionId)],
+        ])
+      );
+    }
     makeDraggable(item, id);
     active.appendChild(item);
   }
@@ -927,8 +1225,7 @@ function renderSidebar() {
     const title = titles[l.id] || l.title || l.name || projectName(l.cwd);
     item.title = l.waitingFor ? `${title} — ${l.waitingFor}` : title;
     markAttention(item, l.id, l.status);
-    const name = nameRow(item, title, l.status, l.model);
-    metaRow(item, projectName(l.cwd), l.status);
+    const name = nameRow(item, title, l.status, projectName(l.cwd));
     // Double-click continues it here; ✎ renames it.
     itemActions(item, name, title, (v) => saveTitle(l.id, v), null, l.id, false);
     item.addEventListener('click', () => {
@@ -942,7 +1239,7 @@ function renderSidebar() {
     item.addEventListener('contextmenu', (e) =>
       showSessionMenu(e, { id: l.id, agent: 'claude', cwd: l.cwd, title, running: true }, [
         [t(currentLang, 'menuRename'), () => startRename(name, title, (v) => saveTitle(l.id, v))],
-        [t(currentLang, 'details'), () => openDetail(l.id)],
+        [t(currentLang, 'tokenDetails'), () => openDetail(l.id)],
       ])
     );
     ext.appendChild(item);
@@ -954,16 +1251,15 @@ function renderSidebar() {
   const items = history.filter((h) => !running.has(h.id));
   if (!items.length) list.appendChild(el('div', 'empty', t(currentLang, 'noHistory')));
   for (const h of items) {
-    const item = el('div', 'item');
+    const item = el('div', 'item history');
     const title = titles[h.id] || h.title;
-    item.title = title;
+    item.title = `${title} — ${projectName(h.cwd)} · ${relativeTime(h.mtime)}`;
     const other = h.agent && h.agent !== 'claude';
-    const name = nameRow(item, title, null, other ? AGENT_NAMES[h.agent] : null);
-    metaRow(item, `${projectName(h.cwd)} · ${relativeTime(h.mtime)}`);
+    const name = nameRow(item, title, null, shortAge(h.mtime));
     itemActions(item, name, title, (v) => saveTitle(h.id, v), null, other ? null : h.id);
     item.addEventListener('click', () => openLaunchModal({ ...h, title }));
     const extra = [[t(currentLang, 'menuRename'), () => startRename(name, title, (v) => saveTitle(h.id, v))]];
-    if (!other) extra.push([t(currentLang, 'details'), () => openDetail(h.id)]);
+    if (!other) extra.push([t(currentLang, 'tokenDetails'), () => openDetail(h.id)]);
     item.addEventListener('contextmenu', (e) => showSessionMenu(e, { ...h, agent: h.agent || 'claude', title }, extra));
     list.appendChild(item);
   }
@@ -1001,33 +1297,41 @@ for (const header of document.querySelectorAll('.sectionTitle')) {
 function renderLimit(id, key, agent) {
   const entry = limits[agent][key];
   const e = $(id);
+  const bar = $(id.replace('Limit', 'Bar'));
   if (!entry) {
     e.textContent = '—';
     e.className = '';
+    e.parentElement.title = '';
+    bar.style.width = '0';
+    bar.parentElement.className = 'mini';
     return;
   }
   const left = 100 - entry.percent;
-  let text = `${entry.percent}% ${t(currentLang, 'used')} (${left}% ${t(currentLang, 'remaining')})`;
+  let tip = `${entry.percent}% ${t(currentLang, 'used')} (${left}% ${t(currentLang, 'remaining')})`;
   if (entry.resetsAt) {
     const opts =
       key === 'weekly'
         ? { weekday: 'short', hour: '2-digit', minute: '2-digit' }
         : { hour: '2-digit', minute: '2-digit' };
-    text += ` · ${t(currentLang, 'resets')} ${entry.resetsAt.toLocaleString(locale(), opts)}`;
+    tip += ` · ${t(currentLang, 'resets')} ${entry.resetsAt.toLocaleString(locale(), opts)}`;
   }
-  e.textContent = text;
-  e.className = entry.percent >= 90 ? 'danger' : entry.percent >= 70 ? 'warn' : '';
+  const level = entry.percent >= 90 ? 'danger' : entry.percent >= 70 ? 'warn' : '';
+  e.textContent = `${entry.percent}%`;
+  e.className = level;
+  e.parentElement.title = tip;
+  bar.style.width = `${Math.min(100, entry.percent)}%`;
+  bar.parentElement.className = 'mini ' + level;
 }
 
 function render() {
   const s = sessions.get(activeId);
-  if (s && s.contextTokens != null) {
-    let text = s.contextTokens.toLocaleString(locale());
-    if (s.contextPct != null) text += ` (${Math.round(s.contextPct)}%)`;
-    $('tokenCount').textContent = text;
+  if (s && s.contextPct != null) {
+    $('tokenCount').textContent = `${Math.round(s.contextPct)}%`;
+    $('tokenCount').parentElement.title = s.contextTokens != null ? `${s.contextTokens.toLocaleString(locale())} tok` : '';
   } else {
-    $('tokenCount').textContent = '—';
+    $('tokenCount').textContent = s && s.contextTokens != null ? s.contextTokens.toLocaleString(locale()) : '—';
   }
+  renderHeader(s);
   // Limits shown are those of the agent in the open session.
   const agent = s?.agent || 'claude';
   renderLimit('fiveHourLimit', 'fiveHour', agent);
@@ -1035,6 +1339,19 @@ function render() {
   document.title = s ? `ClaudeTerm — ${projectName(s.project)}` : 'ClaudeTerm';
   renderSidebar();
 }
+
+// Session header: title, folder, "agent · model · effort" and the detail toggle.
+function renderHeader(s) {
+  $('headTitle').textContent = s ? activeTitle(s) : 'ClaudeTerm';
+  $('headFolder').textContent = s ? shortDir(s.project) : '';
+  const cap = $('headCapsule');
+  if (s) {
+    const effort = /--effort\s+(\S+)/.exec(s.flags || '')?.[1];
+    cap.textContent = [AGENT_NAMES[s.agent], s.model, effort].filter(Boolean).join(' · ');
+  }
+  cap.hidden = !s;
+}
+
 
 // --- Session detail panel ---------------------------------------------------
 
@@ -1110,12 +1427,12 @@ function nameList(rows, limit) {
   draw(false);
   wrap.appendChild(list);
   if (rows.length > limit) {
-    const more = el('button', 'linkBtn', t(currentLang, 'showAll') + ` (${rows.length})`);
+    const more = el('button', 'linkBtn', t(currentLang, 'showAllCount').replace('{n}', rows.length));
     let all = false;
     more.addEventListener('click', () => {
       all = !all;
       draw(all);
-      more.textContent = all ? t(currentLang, 'showLess') : t(currentLang, 'showAll') + ` (${rows.length})`;
+      more.textContent = all ? t(currentLang, 'showLess') : t(currentLang, 'showAllCount').replace('{n}', rows.length);
     });
     wrap.appendChild(more);
   }
@@ -1281,6 +1598,7 @@ function openDetail(id) {
   }
   $('detail').classList.add('open');
   $('detail').setAttribute('aria-hidden', 'false');
+  fitActive();
   loadDetail();
 }
 
@@ -1288,6 +1606,7 @@ function closeDetail() {
   detailId = null;
   $('detail').classList.remove('open');
   $('detail').setAttribute('aria-hidden', 'true');
+  fitActive();
   const s = sessions.get(activeId);
   if (s) s.term.focus();
 }
@@ -1309,9 +1628,9 @@ setInterval(() => {
 function applyLang() {
   document.documentElement.lang = currentLang; // so uppercase headers get "AKTİF", not "AKTIF"
   $('langPicker').value = currentLang;
-  $('lblContext').textContent = t(currentLang, 'context') + ':';
-  $('lblFiveHour').textContent = t(currentLang, 'fiveHour') + ':';
-  $('lblWeekly').textContent = t(currentLang, 'weekly') + ':';
+  $('lblContext').textContent = t(currentLang, 'context');
+  $('lblFiveHour').textContent = t(currentLang, 'fiveHour');
+  $('lblWeekly').textContent = t(currentLang, 'weekly');
   $('btnNew').textContent = '+ ' + t(currentLang, 'newSession');
   $('lblActive').textContent = t(currentLang, 'active');
   $('lblHistory').textContent = t(currentLang, 'history');
@@ -1328,6 +1647,12 @@ function applyLang() {
   $('lblTermFont').textContent = t(currentLang, 'termFontSize');
   $('lblSidebarFont').textContent = t(currentLang, 'sidebarFontSize');
   $('btnSettingsReset').textContent = t(currentLang, 'reset');
+  $('lblAgentTags').textContent = t(currentLang, 'agentTags');
+  $('lblLayout').textContent = t(currentLang, 'layout');
+  $('btnTabNew').title = t(currentLang, 'newSession');
+  fillLayoutPicker();
+  applyLayout();
+  $('tagHint').textContent = t(currentLang, 'agentTagsHint');
   $('btnSettingsDone').textContent = t(currentLang, 'done');
   $('modelLabel').textContent = t(currentLang, 'model');
   $('effortLabel').textContent = t(currentLang, 'effort');
@@ -1386,5 +1711,51 @@ initLoginItem();
 refreshHistory();
 (async () => {
   await pollLive();
+  const demo = await window.claudeTerm.demoMode();
+  if (demo) return startDemo(demo);
   if (!(await restoreOpenSessions())) openLaunchModal(null);
 })();
+
+// --- Demo mode (screenshots) -------------------------------------------------
+
+async function startDemo({ count }) {
+  $('historyList').hidden = false;
+  document.querySelector('[data-list="historyList"]').classList.remove('collapsed');
+  for (let i = 0; i < count; i++) await startSession('--effort medium', null, null, i === 0);
+  setActive(sessions.keys().next().value);
+}
+
+// Scenes: "<view>" or "<view>-light"; views: main, detail, launch, tabs.
+window.claudeTerm.onDemoScene((scene) => {
+  const [view, theme] = scene.split('-');
+  closeMenu();
+  themeChoice = theme === 'light' ? 'light' : 'dark';
+  applyTheme();
+  closeLaunchModal();
+  const s = sessions.get(activeId);
+  if (view === 'detail' && s?.sessionId) openDetail(s.sessionId);
+  else closeDetail();
+  if (view === 'launch') openLaunchModal(null);
+  if (view === 'menu') setTimeout(() => $('btnLayout').click(), 100);
+  if (view === 'tabs' !== (settings.layout === 'top')) setLayout(view === 'tabs' ? 'top' : 'left');
+});
+
+// Cmd/Ctrl+W from the app menu: close the active session after a confirmation.
+let closeAsking = false;
+window.claudeTerm.onMenuCloseSession(async () => {
+  const s = sessions.get(activeId);
+  if (!s || closeAsking) return;
+  closeAsking = true;
+  const id = activeId;
+  try {
+    const ok = await window.claudeTerm.confirmClose({
+      message: t(currentLang, 'closeConfirm').replace('{title}', activeTitle(s)),
+      detail: t(currentLang, 'closeConfirmDetail'),
+      close: t(currentLang, 'closeConfirmYes'),
+      cancel: t(currentLang, 'cancel'),
+    });
+    if (ok && sessions.has(id)) closeTab(id);
+  } finally {
+    closeAsking = false;
+  }
+});
