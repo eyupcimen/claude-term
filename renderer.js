@@ -872,7 +872,13 @@ function renderTabs() {
       });
       // Title on top, "Working" / "Needs you" under it while the agent is busy.
       const text = el('span', 'text');
-      text.appendChild(el('span', 'label', title));
+      const label = el('span', 'label', title);
+      // Double-click the title to rename, same as in the sidebar.
+      label.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        startRename(label, title, (v) => setActiveTitle(s, v));
+      });
+      text.appendChild(label);
       if (status === 'busy' || status === 'waiting') {
         const st = el('span', 'status ' + status);
         st.append(el('span', 'dot ' + status), el('span', null, t(currentLang, 'status_' + status)));

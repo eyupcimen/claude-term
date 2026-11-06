@@ -159,8 +159,8 @@
       background: var(--bg-3);
     }
     .item.active {
-      background: var(--selected);
-      box-shadow: inset 0 0 0 1px var(--line);
+      background: color-mix(in srgb, var(--green) 28%, var(--tab-bg));
+      box-shadow: inset 0 0 0 1px var(--green);
     }
     .item.external {
       cursor: default;
@@ -323,7 +323,8 @@
       background: var(--line);
       color: var(--text);
     }
-    .item input.rename {
+    .item input.rename,
+    .tab input.rename {
       width: 100%;
       box-sizing: border-box;
       background: var(--bg);
@@ -466,12 +467,16 @@
       background: color-mix(in srgb, var(--accent) 16%, var(--tab-bg));
     }
     /* Same look as the active row in the sidebar. */
-    .tab.active {
-      background: var(--selected);
-      color: var(--text);
-    }
     .tab.attention {
       background: var(--attention);
+    }
+    /* The active tab/row stays green whatever its state, so you always see where you are. */
+    .tab.active,
+    .item.active.busy,
+    .item.active.attention {
+      background: color-mix(in srgb, var(--green) 28%, var(--tab-bg));
+      box-shadow: inset 0 0 0 1px var(--green);
+      color: var(--text);
     }
     .tab .icon,
     .tab .close {
