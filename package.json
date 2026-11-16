@@ -40,6 +40,8 @@
       "sessions.js",
       "preload.js",
       "renderer.js",
+      "feedback.js",
+      "assets/agents/*.svg",
       "i18n.js",
       "platform.js",
       "status-writer.js",

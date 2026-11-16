@@ -192,8 +192,84 @@ const TERM_THEMES = {
     brightCyan: '#2f8a8a',
     brightWhite: '#3a3935',
   },
+  instrument: {
+    background: '#090C0E',
+    foreground: '#E6ECEF',
+    cursor: '#FF7A1A',
+    cursorAccent: '#090C0E',
+    selectionBackground: 'rgba(255, 122, 26, 0.3)',
+    blue: '#7CC8F0',
+    brightBlue: '#A3DAF5',
+    green: '#5CD713',
+    yellow: '#FFB347',
+  },
+  organic: {
+    background: '#fdfaf5',
+    foreground: '#201e1d',
+    cursor: '#c67139',
+    cursorAccent: '#fdfaf5',
+    selectionBackground: 'rgba(198, 113, 57, 0.25)',
+    black: '#201e1d',
+    red: '#a8432a',
+    green: '#55623f',
+    yellow: '#94620e',
+    blue: '#3f6a86',
+    magenta: '#8a4a6f',
+    cyan: '#3f7a6e',
+    white: '#6b625a',
+    brightBlack: '#5e564f',
+    brightRed: '#b0602c',
+    brightGreen: '#6a7a4c',
+    brightYellow: '#a8741e',
+    brightBlue: '#4f7a96',
+    brightMagenta: '#9c5a80',
+    brightCyan: '#4f8a7e',
+    brightWhite: '#3a3530',
+  },
+  'xcode-dark': {
+    background: '#1F1F24',
+    foreground: '#FFFFFF',
+    cursor: '#4EB0CC',
+    cursorAccent: '#1F1F24',
+    selectionBackground: 'rgba(81, 95, 112, 0.6)',
+    red: '#FF8170',
+    green: '#78C2B3',
+    yellow: '#D9C97C',
+    blue: '#4EB0CC',
+    magenta: '#FF7AB2',
+    cyan: '#6BDFFF',
+    brightRed: '#FF8170',
+    brightGreen: '#ACF2E4',
+    brightYellow: '#FFA14F',
+    brightBlue: '#6BDFFF',
+    brightMagenta: '#DABAFF',
+    brightCyan: '#B281EB',
+  },
+  'xcode-light': {
+    background: '#FFFFFF',
+    foreground: '#000000',
+    cursor: '#0F68A0',
+    cursorAccent: '#FFFFFF',
+    selectionBackground: 'rgba(164, 205, 255, 0.6)',
+    black: '#000000',
+    red: '#C41A16',
+    green: '#326D74',
+    yellow: '#815F03',
+    blue: '#0F68A0',
+    magenta: '#9B2393',
+    cyan: '#057CB0',
+    white: '#5D5D64',
+    brightBlack: '#5D5D64',
+    brightRed: '#D12F1B',
+    brightGreen: '#3E8087',
+    brightYellow: '#643820',
+    brightBlue: '#0B4F79',
+    brightMagenta: '#AD3DA4',
+    brightCyan: '#1C46A6',
+    brightWhite: '#262626',
+  },
 };
-const THEMES = ['auto', 'light', 'dark'];
+const THEMES = ['auto', 'light', 'dark', 'instrument', 'organic', 'xcode-dark', 'xcode-light'];
 let themeChoice = 'auto';
 try {
   const v = localStorage.getItem('claudeterm-theme');
@@ -862,7 +938,7 @@ function renderTabs() {
       tab.title = `${title} — ${AGENT_NAMES[s.agent]}${s.model ? ' · ' + s.model : ''}`;
       if (id !== activeId && (status === 'waiting' || attention.has(s.sessionId))) tab.classList.add('attention');
       if (status === 'busy' && id !== activeId) tab.classList.add('busy');
-      const icon = el('span', 'icon', AGENT_BADGES[s.agent] || 'CC');
+      const icon = agentBadge('icon', s.agent);
       icon.style.background = settings.tags[s.agent]?.color;
       const close = el('span', 'close', '×');
       close.title = t(currentLang, 'close');
@@ -1100,7 +1176,25 @@ function statusPill(status) {
   return el('span', 'pill ' + status, t(currentLang, 'status_' + status));
 }
 
-const AGENT_BADGES = { claude: 'CC', codex: 'CX', gemini: 'GM', copilot: 'CP', antigravity: 'AG' };
+const AGENT_LOGOS = { claude: 'claude', codex: 'openai', gemini: 'googlegemini', copilot: 'githubcopilot' };
+
+// Agent logo (tinted with currentColor); text badge when there is no logo.
+function agentBadge(cls, agent) {
+  const badge = el('span', cls);
+  const logo = AGENT_LOGOS[agent || 'claude'];
+  if (!logo) {
+    // No logo: the agent's short name ("Antigravity") instead of initials.
+    badge.textContent = (AGENT_NAMES[agent] || agent || '').split(' ')[0];
+    badge.classList.add('hasName');
+    return badge;
+  }
+  const i = el('i', 'agentLogo');
+  i.style.setProperty('--logo', `url(assets/agents/${logo}.svg)`);
+  badge.classList.add('hasLogo');
+  badge.title = AGENT_NAMES[agent] || '';
+  badge.appendChild(i);
+  return badge;
+}
 
 // Title row: status dot, title, and an optional mono note on the right
 // (the terminal app for other terminals, the age for history).
@@ -1117,7 +1211,7 @@ function nameRow(item, title, status, right) {
 // Mono line under the title: agent badge, model, status in words.
 function metaRow(item, agent, model, status) {
   const meta = el('div', 'meta');
-  meta.appendChild(el('span', 'badge', AGENT_BADGES[agent] || 'CC'));
+  meta.appendChild(agentBadge('badge', agent));
   if (model) meta.appendChild(el('span', 'text', model));
   if (status) {
     if (model) meta.appendChild(el('span', 'sep', '·'));
@@ -1178,6 +1272,10 @@ function makeDraggable(item, id) {
 }
 
 function renderSidebar() {
+  // A rename box or drag can vanish without blur/dragend firing (the element is
+  // removed, or the drop lands outside the window). Don't stay frozen then.
+  if (editing && !document.querySelector('input.rename')) editing = false;
+  if (dragId !== null && !document.querySelector('.dragging')) dragId = null;
   if (editing || dragId !== null) return;
   renderTabs();
   const active = $('activeList');
@@ -1301,7 +1399,7 @@ for (const header of document.querySelectorAll('.sectionTitle')) {
 // --- Status bar ------------------------------------------------------------
 
 function renderLimit(id, key, agent) {
-  const entry = limits[agent][key];
+  const entry = limits[agent]?.[key];
   const e = $(id);
   const bar = $(id.replace('Limit', 'Bar'));
   if (!entry) {
@@ -1330,6 +1428,15 @@ function renderLimit(id, key, agent) {
 }
 
 function render() {
+  // The session list must update even if the header or limits fail to draw.
+  try {
+    renderStatus();
+  } finally {
+    renderSidebar();
+  }
+}
+
+function renderStatus() {
   const s = sessions.get(activeId);
   if (s && s.contextPct != null) {
     $('tokenCount').textContent = `${Math.round(s.contextPct)}%`;
@@ -1343,7 +1450,6 @@ function render() {
   renderLimit('fiveHourLimit', 'fiveHour', agent);
   renderLimit('weeklyLimit', 'weekly', agent);
   document.title = s ? `ClaudeTerm — ${projectName(s.project)}` : 'ClaudeTerm';
-  renderSidebar();
 }
 
 // Session header: title, folder, "agent · model · effort" and the detail toggle.
@@ -1671,10 +1777,10 @@ function applyLang() {
 }
 
 function fillThemePicker() {
-  const icons = { auto: '◐', light: '☀', dark: '☾' };
+  const icons = { auto: '◐', light: '☀', dark: '☾', instrument: '◎', organic: '❀', 'xcode-dark': '⌘', 'xcode-light': '⌘' };
   $('themePicker').replaceChildren(
     ...THEMES.map((v) => {
-      const o = el('option', null, `${icons[v]} ${t(currentLang, 'theme_' + v)}`);
+      const o = el('option', null, `${icons[v]} ${t(currentLang, 'theme_' + v.replace('-', '_'))}`);
       o.value = v;
       return o;
     })

@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <title>ClaudeTerm</title>
   <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" />
   <style>
     /* --- Theme tokens: dark by default, light via OS or the picker --- */
     :root {
@@ -28,6 +29,7 @@
       --scrim: rgba(0, 0, 0, 0.6);
       --attention: rgba(240,180,76,.10);
       --mono: 'SF Mono', Menlo, monospace;
+      --sans: -apple-system, system-ui, sans-serif;
       color-scheme: dark;
     }
     :root[data-theme='light'] {
@@ -54,13 +56,56 @@
       color-scheme: light;
     }
 
+    /* Instrument: Run App "1b" look. Orange accent, ice-blue secondary, Plex. */
+    :root[data-theme='instrument'] {
+      --bg: #0C1013; --bg-2: #0F1418; --bg-3: #182026; --selected: rgba(255,122,26,.14);
+      --tab-bg: #11171B; --line: rgba(230,236,239,.13); --text: #E6ECEF; --text-2: #8D9AA1;
+      --text-3: #7D8A91; --accent: #FF7A1A; --accent-soft: rgba(255,122,26,.16); --track: rgba(230,236,239,.14);
+      --static: #7CC8F0; --green: #5CD713; --amber: #FFB347; --red: #FF6B60; --on-accent: #1A0D03;
+      --terminal: #090C0E; --scrim: rgba(0,0,0,.6); --attention: rgba(124,200,240,.10);
+      --mono: 'IBM Plex Mono', 'SF Mono', Menlo, monospace;
+      --sans: 'IBM Plex Sans', -apple-system, system-ui, sans-serif;
+      color-scheme: dark;
+    }
+    /* Organic: MediaMover look. Cream, terracotta, sage, Figtree. */
+    :root[data-theme='organic'] {
+      --bg: #f9f4ed; --bg-2: #f5ead8; --bg-3: #ebddc5; --selected: #ebddc5;
+      --tab-bg: #f5ead8; --line: #dcd3c4; --text: #201e1d; --text-2: #5e564f;
+      --text-3: #6b625a; --accent: #b0602c; --accent-soft: rgba(198,113,57,.14); --track: #dcd3c4;
+      --static: #7a8a5e; --green: #55623f; --amber: #94620e; --red: #a8432a; --on-accent: #FFFFFF;
+      --terminal: #fdfaf5; --scrim: rgba(40,36,30,.35); --attention: rgba(198,113,57,.10);
+      --mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+      --sans: 'Figtree', -apple-system, system-ui, sans-serif;
+      color-scheme: light;
+    }
+    /* Xcode Dark: Xcode "Default (Dark)" editor palette. */
+    :root[data-theme='xcode-dark'] {
+      --bg: #1F1F24; --bg-2: #25252A; --bg-3: #2F2F35; --selected: #3A3A42;
+      --tab-bg: #28282D; --line: #3A3A40; --text: #FFFFFF; --text-2: #A6A6AC;
+      --text-3: #8E8E94; --accent: #4EB0CC; --accent-soft: rgba(78,176,204,.16); --track: #3A3A40;
+      --static: #8E8E94; --green: #67B7A4; --amber: #D9C97C; --red: #FF8170; --on-accent: #0B1A1F;
+      --terminal: #1F1F24; --scrim: rgba(0,0,0,.6); --attention: rgba(217,201,124,.10);
+      --mono: 'SF Mono', Menlo, monospace;
+      color-scheme: dark;
+    }
+    /* Xcode Light: Xcode "Default (Light)" editor palette. */
+    :root[data-theme='xcode-light'] {
+      --bg: #FFFFFF; --bg-2: #F5F5F7; --bg-3: #EBEBEF; --selected: #E1ECFB;
+      --tab-bg: #F5F5F7; --line: #DCDCE0; --text: #000000; --text-2: #5D5D64;
+      --text-3: #6C6C72; --accent: #0F68A0; --accent-soft: rgba(15,104,160,.12); --track: #E3E3E8;
+      --static: #6C6C72; --green: #326D74; --amber: #815F03; --red: #C41A16; --on-accent: #FFFFFF;
+      --terminal: #FFFFFF; --scrim: rgba(40,40,46,.35); --attention: rgba(129,95,3,.10);
+      --mono: 'SF Mono', Menlo, monospace;
+      color-scheme: light;
+    }
+
     html, body {
       margin: 0;
       padding: 0;
       height: 100%;
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, system-ui, sans-serif;
+      font-family: var(--sans);
       overflow: hidden;
     }
     #app {
@@ -231,6 +276,15 @@
       border-radius: 4px;
       background: var(--line);
       color: var(--text);
+    }
+    .agentLogo {
+      display: inline-block;
+      width: 11px;
+      height: 11px;
+      vertical-align: -1px;
+      background: currentColor;
+      -webkit-mask: var(--logo) center / contain no-repeat;
+      mask: var(--logo) center / contain no-repeat;
     }
     .item .meta .sep {
       color: var(--text-3);
@@ -693,7 +747,7 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      font-family: -apple-system, system-ui, sans-serif;
+      font-family: var(--sans);
     }
     .pickers .pickerIcon {
       display: inline-flex;
@@ -980,8 +1034,79 @@
       color: var(--text);
     }
 
+
+    /* --- Feedback --- */
+    #btnFeedback {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: none;
+      border: 0;
+      color: var(--text-2);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #btnFeedback:hover { color: var(--text); }
+    #feedbackBadge {
+      min-width: 16px;
+      padding: 0 4px;
+      border-radius: 8px;
+      background: var(--accent);
+      color: var(--on-accent);
+      font-size: 11px;
+      font-weight: 600;
+      text-align: center;
+    }
+    #feedbackBody { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+    #feedbackBody input,
+    #feedbackBody textarea {
+      background: var(--bg-3);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      padding: 8px 10px;
+      resize: vertical;
+    }
+    #feedbackBody input:focus,
+    #feedbackBody textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    #feedbackBody h3 { margin: 4px 0; font-size: 14px; font-weight: 600; }
+    #feedbackBody button {
+      font: inherit;
+      font-size: 12px;
+      color: var(--text);
+      background: var(--bg-3);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+    #feedbackBody .fbPrimary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; align-self: flex-start; }
+    #feedbackBody .fbPrimary:disabled { opacity: .6; cursor: default; }
+    .fbRow { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    #feedbackClose { background: none; border: 0; color: var(--text-2); font-size: 18px; cursor: pointer; }
+    .fbHint { margin: 0; font-size: 12px; color: var(--text-2); }
+    .fbError { margin: 0; font-size: 12px; color: var(--red); min-height: 0; }
+    .fbError:empty { display: none; }
+    #feedbackBody .fbItem { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 10px 12px; background: var(--bg); }
+    #feedbackBody .fbItem:hover { background: var(--selected); }
+    .fbItemTop { display: flex; justify-content: space-between; gap: 8px; }
+    .fbItemTitle { font-weight: 600; }
+    .fbItemLast { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .fbNew { color: var(--accent); font-size: 11px; font-weight: 600; }
+    .fbStatus { font-family: var(--mono); font-size: 11px; color: var(--text-2); }
+    .fbStatus.resolved { color: var(--green); }
+    .fbStatus.in_progress { color: var(--amber); }
+    .fbThread { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; padding: 4px 0; }
+    .fbMsg { max-width: 80%; padding: 8px 10px; border-radius: 10px; font-size: 13px; line-height: 18px; white-space: pre-wrap; }
+    .fbMsg.user { align-self: flex-end; background: var(--accent-soft); }
+    .fbMsg.admin { align-self: flex-start; background: var(--bg-3); }
+
     /* --- Launch modal --- */
     #launchModal,
+    #feedbackModal,
     #settingsModal {
       position: fixed;
       inset: 0;
@@ -992,10 +1117,12 @@
       z-index: 10;
     }
     #launchModal.open,
+    #feedbackModal.open,
     #settingsModal.open {
       display: flex;
     }
     #launchModal .box,
+    #feedbackModal .box,
     #settingsModal .box {
       background: var(--bg-2);
       border: 1px solid var(--line);
@@ -1009,6 +1136,7 @@
       color: var(--text);
     }
     #launchModal h2,
+    #feedbackModal h2,
     #settingsModal h2 {
       margin: 0 0 6px;
       font-size: 15px;
@@ -1405,6 +1533,7 @@
             <option value="es">ES</option>
           </select>
           <select id="themePicker"></select>
+          <button id="btnFeedback" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg><span id="lblFeedback">Feedback</span><span id="feedbackBadge" hidden>0</span></button>
           <label class="toggle" id="loginToggle"><input type="checkbox" id="loginCheck" /><span id="lblLogin">Open at login</span></label>
         </div>
         <span class="stat"><span class="label" id="lblContext">context:</span><span id="tokenCount">—</span></span>
@@ -1479,6 +1608,13 @@
     </div>
   </div>
 
+  <div id="feedbackModal">
+    <div class="box">
+      <div class="fbRow"><h2 id="feedbackTitle">Feedback</h2><button id="feedbackClose" type="button" aria-label="Close">×</button></div>
+      <div id="feedbackBody"></div>
+    </div>
+  </div>
+
   <div id="ctxMenu" hidden></div>
 
   <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
@@ -1486,5 +1622,6 @@
   <script src="node_modules/@xterm/addon-webgl/lib/addon-webgl.js"></script>
   <script src="i18n.js"></script>
   <script src="renderer.js"></script>
+  <script src="feedback.js"></script>
 </body>
 </html>
