@@ -963,6 +963,7 @@ function renderTabs() {
       tab.append(icon, close, text);
       tab.addEventListener('click', () => setActive(id));
       tab.addEventListener('auxclick', (e) => e.button === 1 && closeTab(id));
+      tab.addEventListener('contextmenu', (e) => showActiveMenu(e, id, s, label, title));
       makeDraggable(tab, id);
       return tab;
     })
@@ -1036,6 +1037,16 @@ function showPlainMenu(e, items) {
   const { innerWidth: w, innerHeight: h } = window;
   menu.style.left = Math.min(e.clientX, w - menu.offsetWidth - 4) + 'px';
   menu.style.top = Math.min(e.clientY, h - menu.offsetHeight - 4) + 'px';
+}
+
+// Right-click on a session running in this window. One menu for both the
+// sidebar item and the tab, so the two layouts offer the same actions.
+function showActiveMenu(e, id, s, nameEl, title) {
+  const items = [[t(currentLang, 'menuRename'), () => startRename(nameEl, title, (v) => setActiveTitle(s, v))]];
+  // The detail panel reads Claude Code transcripts.
+  if (s.agent === 'claude' && s.sessionId) items.push([t(currentLang, 'tokenDetails'), () => openDetail(s.sessionId)]);
+  items.push([t(currentLang, 'close'), () => closeTab(id)]);
+  showPlainMenu(e, items);
 }
 
 // `entry` is a past or running session: { id, agent, cwd, title, running }.
@@ -1305,14 +1316,7 @@ function renderSidebar() {
       other ? null : s.sessionId // the detail panel reads Claude Code transcripts
     );
     item.addEventListener('click', () => setActive(id));
-    if (!other && s.sessionId) {
-      item.addEventListener('contextmenu', (e) =>
-        showPlainMenu(e, [
-          [t(currentLang, 'menuRename'), () => startRename(name, title, (v) => setActiveTitle(s, v))],
-          [t(currentLang, 'tokenDetails'), () => openDetail(s.sessionId)],
-        ])
-      );
-    }
+    item.addEventListener('contextmenu', (e) => showActiveMenu(e, id, s, name, title));
     makeDraggable(item, id);
     active.appendChild(item);
   }
