@@ -261,6 +261,7 @@ document.addEventListener('keydown', (e) => {
 
 function fillFeedbackLabels() {
   $('lblFeedback').textContent = ft('feedback');
+  $('btnFeedback').title = ft('feedback');
 }
 $('langPicker').addEventListener('change', () => setTimeout(fillFeedbackLabels));
 fillFeedbackLabels();

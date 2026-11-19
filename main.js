@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const pty = require('node-pty');
 const { spawnSync } = require('child_process');
-const { listLive, readDetail } = require('./sessions');
+const { listLive, readDetail, tokenTally } = require('./sessions');
 const codex = require('./codex');
 const gemini = require('./gemini');
 const copilot = require('./copilot');
@@ -78,6 +78,7 @@ function watchStatusFile(id, statusFile) {
   let lastMtime = 0;
   let aiTitle = null;
   let lastTitleCheck = 0;
+  const tally = tokenTally();
   return setInterval(() => {
     let stat;
     try {
@@ -109,6 +110,8 @@ function watchStatusFile(id, statusFile) {
       sessionId: data.session_id || null,
       contextTokens: contextTokensFrom(data.context_window),
       contextPct: data.context_window?.used_percentage ?? null,
+      // The status line's own totals only cover the current window; sum the transcript.
+      totalTokens: data.transcript_path ? tally(data.transcript_path) : null,
       model: data.model?.display_name || null,
       fiveHour: rl.five_hour || null,
       weekly: rl.seven_day || null,

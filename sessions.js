@@ -531,4 +531,67 @@ function buildContext(first, last, model, slices) {
   };
 }
 
-module.exports = { listLive, readDetail, modelLabel, findTranscript };
+// Running token total of a transcript, read incrementally: each call reads
+// only the bytes appended since the last one. Counts every token the model
+// processed (input, output, cache reads and writes), each turn once.
+function tokenTally() {
+  let file = null;
+  let offset = 0;
+  let rest = '';
+  let previousTurn;
+  let total = 0;
+  return function update(path) {
+    if (path !== file) {
+      file = path;
+      offset = 0;
+      rest = '';
+      previousTurn = undefined;
+      total = 0;
+    }
+    let fd;
+    try {
+      fd = fs.openSync(file, 'r');
+      const size = fs.fstatSync(fd).size;
+      if (size < offset) {
+        // Rewritten or truncated: count again from the start.
+        offset = 0;
+        rest = '';
+        previousTurn = undefined;
+        total = 0;
+      }
+      while (offset < size) {
+        const buf = Buffer.alloc(Math.min(size - offset, 4 * 1024 * 1024));
+        const n = fs.readSync(fd, buf, 0, buf.length, offset);
+        if (!n) break;
+        offset += n;
+        const lines = (rest + buf.toString('utf8', 0, n)).split('\n');
+        rest = lines.pop(); // partial last line waits for the next read
+        for (const line of lines) {
+          if (!line.includes('"usage"')) continue;
+          let r;
+          try {
+            r = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          const m = r && r.type === 'assistant' && r.message;
+          if (!m || !m.usage) continue;
+          // Every content block of a turn repeats the turn's usage.
+          const turn = str(m.id);
+          if (turn !== undefined && turn === previousTurn) continue;
+          previousTurn = turn;
+          const t = emptyTokens();
+          addUsage(t, m.usage);
+          total += t.input + t.output + t.cacheRead + t.cacheCreate;
+        }
+      }
+    } catch {
+      return total || null; // no transcript yet
+    } finally {
+      if (fd !== undefined) fs.closeSync(fd);
+    }
+    return total;
+  };
+}
+
+module.exports = { listLive, readDetail, modelLabel, findTranscript, tokenTally };

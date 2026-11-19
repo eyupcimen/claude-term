@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <title>ClaudeTerm</title>
   <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Archivo:wght@400;500;600;700;800&family=Big+Shoulders+Display:wght@700;800;900&display=swap" />
   <style>
     /* --- Theme tokens: dark by default, light via OS or the picker --- */
     :root {
@@ -77,6 +77,30 @@
       --mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
       --sans: 'Figtree', -apple-system, system-ui, sans-serif;
       color-scheme: light;
+    }
+    /* Bold: MediaMover v4 Bold look. Near-black warm neutrals, red-orange
+       accent, Archivo text, Big Shoulders Display for titles. */
+    :root[data-theme='bold'] {
+      --bg: #0E0A09; --bg-2: #0A0706; --bg-3: #241D1B; --selected: #2F2724;
+      --tab-bg: #1A1513; --line: #38312F; --text: #F6EDE0; --text-2: #B2A8A5;
+      --text-3: #8D8481; --accent: #F4421D; --accent-soft: rgba(244,66,29,.16); --track: #38312F;
+      --static: #39B5FF; --green: #61DC6B; --amber: #FFB90E; --red: #FC65B6; --on-accent: #120805;
+      --terminal: #080504; --scrim: rgba(5,3,2,.7); --attention: rgba(255,185,14,.10);
+      --mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+      --sans: 'Archivo', -apple-system, system-ui, sans-serif;
+      --display: 'Big Shoulders Display', 'Archivo', sans-serif;
+      color-scheme: dark;
+    }
+    :root[data-theme='bold'] #headTitle {
+      font-family: var(--display);
+      font-size: 20px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .01em;
+    }
+    :root[data-theme='bold'] .tab .label,
+    :root[data-theme='bold'] .item .name {
+      font-weight: 700;
     }
     /* Xcode Dark: Xcode "Default (Dark)" editor palette. */
     :root[data-theme='xcode-dark'] {
@@ -549,7 +573,7 @@
       color: var(--bg);
     }
     .tab .close {
-      display: none;
+      visibility: hidden;
       color: var(--text-2);
       font-size: 13px;
       font-family: inherit;
@@ -560,11 +584,9 @@
       background: var(--line);
       color: var(--text);
     }
-    .tab:hover .icon {
-      display: none;
-    }
-    .tab:hover .close {
-      display: flex;
+    .tab:hover .close,
+    .tab.active .close {
+      visibility: visible;
     }
     .tab .label {
       flex: 1;
@@ -741,6 +763,13 @@
     }
     #statusbar .stat > .danger {
       color: var(--red);
+    }
+    /* Narrow windows: the feedback button keeps its icon and tooltip so the
+       limits and token total still fit beside the pickers. */
+    @media (max-width: 1320px) {
+      #lblFeedback {
+        display: none;
+      }
     }
     .pickers {
       margin-right: auto;
@@ -1539,6 +1568,7 @@
         <span class="stat"><span class="label" id="lblContext">context:</span><span id="tokenCount">—</span></span>
         <span class="stat"><span class="label" id="lblFiveHour">5-hour limit:</span><span class="mini" aria-hidden="true"><span id="fiveHourBar"></span></span><span id="fiveHourLimit">—</span></span>
         <span class="stat"><span class="label" id="lblWeekly">weekly limit:</span><span class="mini" aria-hidden="true"><span id="weeklyBar"></span></span><span id="weeklyLimit">—</span></span>
+        <span class="stat"><span class="label" id="lblTotal">total tokens:</span><span id="totalTokens">—</span></span>
       </div>
       <div id="workArea">
       <div id="terminals">

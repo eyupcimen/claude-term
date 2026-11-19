@@ -226,6 +226,23 @@ const TERM_THEMES = {
     brightCyan: '#4f8a7e',
     brightWhite: '#3a3530',
   },
+  bold: {
+    background: '#080504',
+    foreground: '#F6EDE0',
+    cursor: '#F4421D',
+    cursorAccent: '#080504',
+    selectionBackground: 'rgba(244, 66, 29, 0.3)',
+    red: '#F4421D',
+    green: '#61DC6B',
+    yellow: '#FFB90E',
+    blue: '#39B5FF',
+    magenta: '#FC65B6',
+    brightRed: '#FF6A4A',
+    brightGreen: '#8BE892',
+    brightYellow: '#FFCC52',
+    brightBlue: '#6CC8FF',
+    brightMagenta: '#FF8DCA',
+  },
   'xcode-dark': {
     background: '#1F1F24',
     foreground: '#FFFFFF',
@@ -269,7 +286,7 @@ const TERM_THEMES = {
     brightWhite: '#262626',
   },
 };
-const THEMES = ['auto', 'light', 'dark', 'instrument', 'organic', 'xcode-dark', 'xcode-light'];
+const THEMES = ['auto', 'light', 'dark', 'bold', 'instrument', 'organic', 'xcode-dark', 'xcode-light'];
 let themeChoice = 'auto';
 try {
   const v = localStorage.getItem('claudeterm-theme');
@@ -455,6 +472,7 @@ window.claudeTerm.onStatusUpdate((msg) => {
     s.aiTitle = msg.aiTitle || s.aiTitle;
     s.contextTokens = msg.contextTokens;
     s.contextPct = msg.contextPct;
+    s.totalTokens = msg.totalTokens ?? s.totalTokens;
   }
   for (const key of ['fiveHour', 'weekly']) {
     if (!msg[key]) continue;
@@ -491,9 +509,9 @@ function alertLimit(agent, key, entry) {
 const MODELS = [
   { value: '', name: null, desc: 'modelDescDefault' },
   { value: 'claude-opus-5-5', name: 'Opus 5.5', desc: 'modelDescOpus' },
-  { value: 'claude-sonnet-5', name: 'Sonnet 5', desc: 'modelDescSonnet' },
-  { value: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5', desc: 'modelDescHaiku' },
-  { value: 'claude-fable-5-1', name: 'Fable 5.1', desc: 'modelDescFable' },
+  { value: 'claude-sonnet-5-5', name: 'Sonnet 5.5', desc: 'modelDescSonnet' },
+  { value: 'claude-haiku-5-5', name: 'Haiku 5.5', desc: 'modelDescHaiku' },
+  { value: 'claude-fable-5-2', name: 'Fable 5.2', desc: 'modelDescFable' },
 ];
 const EFFORTS = ['', 'low', 'medium', 'high', 'xhigh', 'max'];
 // Codex takes its model from ~/.codex/config.toml; only the effort is offered.
@@ -507,11 +525,14 @@ function effortMeter(e) {
   for (let i = 1; i <= 5; i++) meter.appendChild(el('i', i <= EFFORT_LEVEL[e] ? 'on' : null));
   return meter;
 }
-// Older versions of the app saved bare aliases.
+// Older versions of the app saved bare aliases or ids of earlier models.
 const LEGACY_MODELS = {
-  sonnet: 'claude-sonnet-5',
+  sonnet: 'claude-sonnet-5-5',
   opus: 'claude-opus-5-5',
-  haiku: 'claude-haiku-4-5-20251001',
+  haiku: 'claude-haiku-5-5',
+  'claude-sonnet-5': 'claude-sonnet-5-5',
+  'claude-haiku-4-5-20251001': 'claude-haiku-5-5',
+  'claude-fable-5-1': 'claude-fable-5-2',
 };
 
 function loadChoice(key, valid, fallback) {
@@ -524,7 +545,7 @@ function loadChoice(key, valid, fallback) {
 }
 
 // Sonnet by default: it uses up plan limits about half as fast as Opus.
-let chosenModel = loadChoice('claudeterm-model', MODELS.map((m) => m.value), 'claude-sonnet-5');
+let chosenModel = loadChoice('claudeterm-model', MODELS.map((m) => m.value), 'claude-sonnet-5-5');
 let chosenEffort = loadChoice('claudeterm-effort', EFFORTS, '');
 let chosenAgent = loadChoice('claudeterm-agent', AGENTS, 'claude');
 let installed = null; // agent CLIs found on this machine, once known
@@ -926,7 +947,7 @@ function closeTab(id) {
 }
 
 // Safari-like tabs: equal widths that shrink as tabs are added, the agent's
-// icon on the left, replaced by × on hover.
+// icon on the left and × on the right.
 function renderTabs() {
   if (!isTabs(settings.layout)) return;
   $('tabs').replaceChildren(
@@ -934,6 +955,7 @@ function renderTabs() {
       const info = s.agent === 'claude' && s.sessionId && live.get(s.sessionId);
       const status = s.agent !== 'claude' ? s.agentStatus || 'idle' : info ? info.status : 'idle';
       const tab = el('div', 'tab' + (id === activeId ? ' active' : ''));
+      tab.dataset.id = id;
       const title = activeTitle(s);
       tab.title = `${title} — ${AGENT_NAMES[s.agent]}${s.model ? ' · ' + s.model : ''}`;
       if (id !== activeId && (status === 'waiting' || attention.has(s.sessionId))) tab.classList.add('attention');
@@ -960,10 +982,10 @@ function renderTabs() {
         st.append(el('span', 'dot ' + status), el('span', null, t(currentLang, 'status_' + status)));
         text.appendChild(st);
       }
-      tab.append(icon, close, text);
+      tab.append(icon, text, close);
       tab.addEventListener('click', () => setActive(id));
       tab.addEventListener('auxclick', (e) => e.button === 1 && closeTab(id));
-      tab.addEventListener('contextmenu', (e) => showActiveMenu(e, id, s, label, title));
+      tab.addEventListener('contextmenu', (e) => showActiveMenu(e, id, s));
       makeDraggable(tab, id);
       return tab;
     })
@@ -1041,8 +1063,15 @@ function showPlainMenu(e, items) {
 
 // Right-click on a session running in this window. One menu for both the
 // sidebar item and the tab, so the two layouts offer the same actions.
-function showActiveMenu(e, id, s, nameEl, title) {
-  const items = [[t(currentLang, 'menuRename'), () => startRename(nameEl, title, (v) => setActiveTitle(s, v))]];
+function showActiveMenu(e, id, s) {
+  // The list can re-render while the menu is open; look the title up on click.
+  const rename = () => {
+    const nameEl = document.querySelector(
+      isTabs(settings.layout) ? `#tabs .tab[data-id="${id}"] .label` : `#activeList .item[data-id="${id}"] .name`
+    );
+    if (nameEl) startRename(nameEl, activeTitle(s), (v) => setActiveTitle(s, v));
+  };
+  const items = [[t(currentLang, 'menuRename'), rename]];
   // The detail panel reads Claude Code transcripts.
   if (s.agent === 'claude' && s.sessionId) items.push([t(currentLang, 'tokenDetails'), () => openDetail(s.sessionId)]);
   items.push([t(currentLang, 'close'), () => closeTab(id)]);
@@ -1294,6 +1323,7 @@ function renderSidebar() {
   if (!sessions.size) active.appendChild(el('div', 'empty', t(currentLang, 'noActive')));
   for (const [id, s] of sessions) {
     const item = el('div', 'item' + (id === activeId ? ' active' : ''));
+    item.dataset.id = id;
     const title = activeTitle(s);
     item.title = title;
     const other = s.agent !== 'claude';
@@ -1316,7 +1346,7 @@ function renderSidebar() {
       other ? null : s.sessionId // the detail panel reads Claude Code transcripts
     );
     item.addEventListener('click', () => setActive(id));
-    item.addEventListener('contextmenu', (e) => showActiveMenu(e, id, s, name, title));
+    item.addEventListener('contextmenu', (e) => showActiveMenu(e, id, s));
     makeDraggable(item, id);
     active.appendChild(item);
   }
@@ -1448,6 +1478,9 @@ function renderStatus() {
   } else {
     $('tokenCount').textContent = s && s.contextTokens != null ? s.contextTokens.toLocaleString(locale()) : '—';
   }
+  const total = s?.totalTokens;
+  $('totalTokens').textContent = total != null ? compact(total) : '—';
+  $('totalTokens').parentElement.title = total != null ? `${fmt(total)} tok` : '';
   renderHeader(s);
   // Limits shown are those of the agent in the open session.
   const agent = s?.agent || 'claude';
@@ -1747,6 +1780,7 @@ function applyLang() {
   $('lblContext').textContent = t(currentLang, 'context');
   $('lblFiveHour').textContent = t(currentLang, 'fiveHour');
   $('lblWeekly').textContent = t(currentLang, 'weekly');
+  $('lblTotal').textContent = t(currentLang, 'totalTokens');
   $('btnNew').textContent = '+ ' + t(currentLang, 'newSession');
   $('lblActive').textContent = t(currentLang, 'active');
   $('lblHistory').textContent = t(currentLang, 'history');
@@ -1781,7 +1815,7 @@ function applyLang() {
 }
 
 function fillThemePicker() {
-  const icons = { auto: '◐', light: '☀', dark: '☾', instrument: '◎', organic: '❀', 'xcode-dark': '⌘', 'xcode-light': '⌘' };
+  const icons = { auto: '◐', light: '☀', dark: '☾', instrument: '◎', organic: '❀', bold: '■', 'xcode-dark': '⌘', 'xcode-light': '⌘' };
   $('themePicker').replaceChildren(
     ...THEMES.map((v) => {
       const o = el('option', null, `${icons[v]} ${t(currentLang, 'theme_' + v.replace('-', '_'))}`);
